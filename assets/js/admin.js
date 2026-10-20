@@ -29,14 +29,13 @@ document.addEventListener('click', (e) => {
 /* ---------- Login (13) ---------- */
 function loginScreen(msg = '') {
   root.innerHTML = `<div class="login-wrap"><form class="login-card" id="f" novalidate>
-    <div class="lk">${icon('lock')}</div><h1>دخول الإدارة</h1><p>الرجاء إدخال بيانات لوحة التحكم</p>
+    <div style="display:flex;justify-content:center">${brand('ADMIN')}</div><h1>دخول الإدارة</h1><p>أدخل بيانات حساب الإدارة</p>
     ${msg ? `<div class="announce" style="color:var(--bad);border-color:rgba(229,130,111,.3)">${icon('alert')}<span>${esc(msg)}</span></div>` : ''}
     <div class="field"><label>البريد الإلكتروني</label><div class="input-wrap">${icon('mail')}<input class="input has-ico ltr" name="email" type="email" autocomplete="username" placeholder="admin@example.com" required maxlength="100"></div></div>
     <div class="field"><label>كلمة المرور</label><div class="input-wrap">${icon('lock')}<input class="input has-ico" name="pw" type="password" autocomplete="current-password" required maxlength="64"></div></div>
     <div id="cap" class="captcha"></div>
     <button class="btn btn-primary btn-block" type="submit">دخول</button>
-    <p class="warn-note">لا يُسمح لغير المصرّح لهم بالدخول، كل المحاولات مسجّلة</p>
-    <div style="display:flex;justify-content:center;margin-top:6px">${brand()}</div></form></div>`;
+    <p class="warn-note">الدخول مخصص للإدارة فقط</p></form></div>`;
   const f = $('#f');
   api('/api/config').then((c) => { A.cfg = c; return captcha($('#cap'), c.turnstileSiteKey); }).then((c) => { A.cap = c; }).catch(() => {});
   f.addEventListener('submit', (e) => {
@@ -63,7 +62,7 @@ function shell() {
   A.actions.tab = (b) => { A.tab = b.dataset.k; store.set('gl_adm_tab', A.tab); closeSide(); renderTab(); };
   A.actions.logout = async () => { if (await confirmSheet({ title: 'تسجيل الخروج؟', ok: 'خروج', danger: true })) { await logout(); } };
   A.actions.push = async (b) => busy(b, async () => {
-    try { A.cfg = A.cfg || await api('/api/config'); await enablePush(A.cfg.vapidKey, { admin: true }); toast('ستصلك إشعارات الطلبات والإيداعات الجديدة 🔔', 'ok', 4000); }
+    try { A.cfg = A.cfg || await api('/api/config'); await enablePush(A.cfg.vapidKey, { admin: true }); toast('ستصلك إشعارات الطلبات والإيداعات الجديدة', 'ok', 4000); }
     catch (e) { toast(e.message, 'bad', 4500); }
   });
   A.actions.menu = () => { $('#side').classList.add('open'); const ov = document.createElement('div'); ov.className = 'side-ov'; ov.id = 'side-ov'; ov.onclick = closeSide; document.body.appendChild(ov); };
@@ -102,11 +101,11 @@ function barChart(days, key, { h = 190 } = {}) {
   const bars = days.map((d, i) => {
     const bh = Math.max(d[key] ? 3 : 0, (d[key] / max) * (h - 30));
     const x = w - (i + 1) * bw;
-    return `<rect x="${x + bw * 0.18}" y="${h - 18 - bh}" width="${bw * 0.64}" height="${bh}" rx="3" fill="url(#bg)"><title>${d.day}: ${fmt(d[key])}</title></rect>`;
+    return `<rect x="${x + bw * 0.2}" y="${h - 18 - bh}" width="${bw * 0.6}" height="${bh}" rx="2" fill="#D4B895"><title>${d.day}: ${fmt(d[key])}</title></rect>`;
   }).join('');
   const labels = days.map((d, i) => (i % 5 === 4 || i === n - 1 ? `<text x="${w - (i + 0.5) * bw}" y="${h - 3}" text-anchor="middle">${d.day.slice(5).replace('-', '/')}</text>` : '')).join('');
   const grid = [0.25, 0.5, 0.75, 1].map((p) => `<line x1="0" x2="${w}" y1="${h - 18 - p * (h - 30)}" y2="${h - 18 - p * (h - 30)}" stroke="rgba(232,213,183,.07)"/>`).join('');
-  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EBD1A8"/><stop offset="1" stop-color="#8F5F39"/></linearGradient></defs>${grid}${bars}${labels}<text x="${w}" y="10" text-anchor="end">${fmt(max)}</text></svg>`;
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img">${grid}${bars}${labels}<text x="${w}" y="10" text-anchor="end">${fmt(max)}</text></svg>`;
 }
 function lineChart(days, key, { h = 150 } = {}) {
   const w = 640, n = days.length;
@@ -122,29 +121,35 @@ function hbars(rows, valKey, labelKey, fmtV = (v) => fmt(v)) {
   return `<div class="hbar">${rows.map((r) => `<div class="r"><div><span>${esc(r[labelKey])}</span><b class="num">${fmtV(r[valKey], r)}</b></div><div class="track"><div class="fill" style="width:${Math.max(3, (r[valKey] / max) * 100)}%"></div></div></div>`).join('') || '<span class="muted">لا توجد بيانات بعد</span>'}</div>`;
 }
 
-/* ---------- Dashboard ---------- */
+/* ---------- Dashboard (clean tables) ---------- */
 async function dash() {
   loading('الإحصائيات');
   const s = await api('/api/admin/stats');
   A.stats = s;
   const k = s.kpi;
-  const tile = (ic, label, val, hl = '') => `<div class="kpi ${hl}"><span class="k-ico">${icon(ic)}</span><small>${label}</small><b>${val}</b></div>`;
+  const m = (v) => `<span class="num">${fmt(v)}</span> د.ل`;
+  const n = (v) => `<span class="num">${v}</span>`;
+  const rows = [
+    ['مبيعات اليوم', m(k.revenueToday)], ['مبيعات آخر 7 أيام', m(k.revenue7)], ['مبيعات آخر 30 يوم', m(k.revenue30)], ['إجمالي المبيعات', m(k.revenueAll)],
+    [`<a href="#" data-act="go" data-k="orders">طلبات معلّقة</a>`, k.pendingOrders ? `<b style="color:var(--warn)">${n(k.pendingOrders)}</b>` : n(0)],
+    [`<a href="#" data-act="go" data-k="deposits">إيداعات معلّقة</a>`, k.pendingDeposits ? `<b style="color:var(--warn)">${n(k.pendingDeposits)}</b>` : n(0)],
+    ['عدد المستخدمين', n(k.users)], ['مجموع أرصدة العملاء', m(k.balances)], ['إيداعات مقبولة (30 يوم)', m(k.deposits30)],
+    ['طلبات مكتملة (الكل)', n(k.ordersCompletedAll)], ['طلبات تسليم تلقائي (30 يوم)', n(k.autoOrders30)], ['أكواد متاحة في المخزون', n(k.stockAvailable)],
+  ];
+  const last7 = s.days.slice(-7).reverse();
   $('#main').innerHTML = top('الإحصائيات', `<button class="btn btn-soft btn-sm" data-act="re">${icon('refresh', 'ico-sm')} تحديث</button>`) + `
-    <div class="kpis">
-      ${tile('coin', 'مبيعات اليوم', money(k.revenueToday), 'hl')}${tile('chart', 'مبيعات 7 أيام', money(k.revenue7))}
-      ${tile('stack', 'مبيعات 30 يوم', money(k.revenue30))}${tile('receipt', 'إجمالي المبيعات', money(k.revenueAll))}
-      <button class="kpi" data-act="go" data-k="orders" style="text-align:right"><span class="k-ico" style="color:var(--warn)">${icon('clock')}</span><small>طلبات معلّقة</small><b class="num">${k.pendingOrders}</b></button>
-      <button class="kpi" data-act="go" data-k="deposits" style="text-align:right"><span class="k-ico" style="color:var(--warn)">${icon('wallet')}</span><small>إيداعات معلّقة</small><b class="num">${k.pendingDeposits}</b></button>
-      ${tile('users', 'المستخدمين', `<span class="num">${k.users}</span>`)}${tile('wallet', 'أرصدة العملاء', money(k.balances))}
-      ${tile('plus', 'إيداعات 30 يوم', money(k.deposits30))}${tile('check', 'طلبات مكتملة (الكل)', `<span class="num">${k.ordersCompletedAll}</span>`)}
-      ${tile('bolt', 'تسليم تلقائي 30 يوم', `<span class="num">${k.autoOrders30}</span>`)}${tile('key', 'أكواد متاحة', `<span class="num">${k.stockAvailable}</span>`)}
+    <div class="panels two">
+      <div class="panel"><h3>ملخص</h3><table class="tbl kv2"><tbody>${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>
+      <div class="panel"><h3>آخر 7 أيام</h3><table class="tbl"><thead><tr><th>اليوم</th><th>الطلبات</th><th>المبيعات</th><th>الإيداعات</th></tr></thead><tbody>
+        ${last7.map((d) => `<tr><td class="num">${d.day.slice(5).replace('-', '/')}</td><td class="num">${d.orders}</td><td class="num">${fmt(d.revenue)}</td><td class="num">${fmt(d.deposits)}</td></tr>`).join('')}</tbody></table></div>
     </div>
-    <div class="panels two"><div class="panel"><h3>المبيعات اليومية <small>آخر 30 يوم — د.ل</small></h3>${barChart(s.days, 'revenue')}</div>
-      <div class="panel"><h3>الأكثر مبيعاً <small>30 يوم</small></h3>${hbars(s.top, 'revenue', 'title', (v, r) => `${fmt(v)} <small class="muted">(${r.count})</small>`)}</div></div>
-    <div class="panels two"><div class="panel"><h3>عدد الطلبات يومياً <small>آخر 30 يوم</small></h3>${lineChart(s.days, 'orders')}</div>
-      <div class="panel"><h3>الإيداعات حسب الطريقة <small>30 يوم — د.ل</small></h3>${hbars(s.methods, 'value', 'label')}</div></div>
-    ${s.warnings && s.warnings.length ? `<div class="panel" style="margin-top:14px;border-color:rgba(229,130,111,.35)"><h3 style="color:var(--bad)">${icon('alert', 'ico-sm')} أجزاء لم تُحسب</h3><div class="tbl-mini">${s.warnings.map((w) => `<div><code style="direction:ltr;text-align:left;overflow-wrap:anywhere;font-size:11.5px">${esc(w)}</code></div>`).join('')}</div></div>` : ''}
-    <p class="muted" style="font-size:12px;margin-top:12px">آخر تحديث: ${fmtDate(new Date(s.at).toISOString(), true)} — تتحدث كل دقيقة</p>`;
+    <div class="panel" style="margin-top:14px"><h3>المبيعات اليومية <small>آخر 30 يوم — د.ل</small></h3>${barChart(s.days, 'revenue')}</div>
+    <div class="panels two">
+      <div class="panel"><h3>الأكثر مبيعاً <small>30 يوم</small></h3>${s.top.length ? `<table class="tbl"><thead><tr><th>الخدمة</th><th>العدد</th><th>المبيعات</th></tr></thead><tbody>${s.top.map((t) => `<tr><td>${esc(t.title)}</td><td class="num">${t.count}</td><td class="num">${fmt(t.revenue)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">لا توجد بيانات بعد</span>'}</div>
+      <div class="panel"><h3>الإيداعات حسب الطريقة <small>30 يوم</small></h3>${s.methods.length ? `<table class="tbl"><thead><tr><th>الطريقة</th><th>المبلغ</th></tr></thead><tbody>${s.methods.map((x) => `<tr><td>${esc(x.label)}</td><td class="num">${fmt(x.value)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">لا توجد بيانات بعد</span>'}</div>
+    </div>
+    ${s.warnings && s.warnings.length ? `<div class="panel" style="margin-top:14px;border-color:rgba(217,122,108,.4)"><h3 style="color:var(--bad)">أجزاء لم تُحسب</h3>${s.warnings.map((w) => `<code style="display:block;direction:ltr;text-align:left;overflow-wrap:anywhere;font-size:11.5px;margin-top:6px">${esc(w)}</code>`).join('')}</div>` : ''}
+    <p class="muted" style="font-size:12px;margin-top:12px">آخر تحديث: ${fmtDate(new Date(s.at).toISOString(), true)}</p>`;
   A.actions.re = renderTab;
   A.actions.go = (b) => { A.tab = b.dataset.k; renderTab(); };
 }
@@ -163,7 +168,7 @@ async function orders() {
     const list = r.orders.filter((o) => !t || [o.title, o.userName, o.userEmail, o.input, o.id, o.contactPhone].some((v) => String(v || '').toLowerCase().includes(t)));
     $('#list').innerHTML = list.length ? list.map((o) => `<div class="item ${o.status === 'pending' ? 'pending' : ''}">
       <div class="item-top">${o.status !== 'pending' ? `<label class="check"><input type="checkbox" data-sel="${esc(o.id)}" ${sel.has(o.id) ? 'checked' : ''}></label>` : ''}<span class="th">${imgTag(o.image, o.title)}</span>
-        <div class="tt"><b>${esc(o.title)}</b><small>${esc(o.userName || '—')} • ${esc(o.userEmail || '')}</small><small><span class="num">#${esc(o.id.slice(0, 8).toUpperCase())}</span> • ${timeAgo(o.createdAt)} • ${o.delivery === 'auto' ? '⚡ تلقائي' : 'يدوي'}</small></div>
+        <div class="tt"><b>${esc(o.title)}</b><small>${esc(o.userName || '—')} • ${esc(o.userEmail || '')}</small><small><span class="num">#${esc(o.id.slice(0, 8).toUpperCase())}</span> • ${timeAgo(o.createdAt)} • ${o.delivery === 'auto' ? 'تلقائي' : 'يدوي'}</small></div>
         <div class="amt"><b>${money(o.total)}</b>${ST[o.status] || ''}</div></div>
       <div class="item-data"><span class="lbl">البيانات:</span><code>${esc(o.input || '—')}</code>${o.input ? `<button class="btn btn-soft btn-xs" data-copy="${esc(o.input)}">${icon('copy', 'ico-sm')}</button>` : ''}</div>
       ${o.contactPhone ? `<div class="item-data"><span class="lbl">التواصل:</span><code>${esc(o.contactPhone)}</code><a class="btn btn-soft btn-xs" target="_blank" rel="noopener" href="https://wa.me/${esc(o.contactPhone.replace(/\D/g, '').replace(/^0/, '218'))}">${icon('whatsapp', 'ico-sm')}</a></div>` : ''}
@@ -337,7 +342,7 @@ async function services() {
       <div class="field full"><label>الصورة</label>${uploader('image', s.image || '')}</div>
       <div class="field full"><label>الوصف</label><textarea class="textarea" data-in="description" maxlength="1500">${esc(s.description || '')}</textarea></div>
       <label class="toggle-row full"><span><b>الخدمة مفعّلة</b><small>تظهر في المتجر ومتاحة للشراء</small></span><span class="switch"><input type="checkbox" data-in="status" ${s.id ? (s.active ? 'checked' : '') : 'checked'}></span></label>
-      <label class="toggle-row full"><span><b>⚡ تسليم تلقائي للأكواد</b><small>يُسلّم كود من المخزون فور الشراء</small></span><span class="switch"><input type="checkbox" data-in="autoDelivery" id="fAuto" ${s.autoDelivery ? 'checked' : ''}></span></label>
+      <label class="toggle-row full"><span><b>تسليم تلقائي للأكواد</b><small>يُسلّم كود من المخزون فور الشراء</small></span><span class="switch"><input type="checkbox" data-in="autoDelivery" id="fAuto" ${s.autoDelivery ? 'checked' : ''}></span></label>
       <div class="field"><label>نوع حقل البيانات</label><select class="select" data-in="fieldType">${[['id', 'ID لاعب'], ['phone', 'رقم هاتف'], ['account', 'رابط/اسم حساب'], ['custom', 'حقل مخصص']].map(([k, t]) => `<option value="${k}" ${(s.fieldType || 'id') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>عنوان الحقل (اختياري)</label><input class="input" data-in="fieldCustomLabel" maxlength="60" value="${esc(s.fieldLabel || '')}" placeholder="مثال: ID ببجي"></div>
       <label class="toggle-row full"><span><b>طلب بيانات من العميل</b><small>يُخفى تلقائياً مع التسليم التلقائي</small></span><span class="switch"><input type="checkbox" data-in="fieldEnabled" ${s.id ? (s.fieldEnabled || s.autoDelivery ? 'checked' : '') : 'checked'}></span></label>
@@ -450,7 +455,7 @@ async function userSheet(uid, onChange) {
 /* ---------- Notify ---------- */
 async function notify() {
   $('#main').innerHTML = top('الإشعارات') + `<div class="panel" style="max-width:640px"><h3>${icon('bell', 'ico-sm')} إرسال إشعار لكل المستخدمين</h3>
-    <div class="form-grid"><div class="field"><label>العنوان</label><input class="input" id="nt" maxlength="80" placeholder="عرض خاص 🔥"></div>
+    <div class="form-grid"><div class="field"><label>العنوان</label><input class="input" id="nt" maxlength="80" placeholder="عرض خاص"></div>
     <div class="field"><label>النص</label><textarea class="textarea" id="nb" maxlength="400" placeholder="خصم 20% على بطاقات Xbox لفترة محدودة"></textarea></div>
     <button class="btn btn-primary" data-act="send">${icon('send', 'ico-sm')} إرسال للجميع</button>
     <span class="hint">يظهر في صفحة الإشعارات لكل العملاء، ويصل كإشعار جوال لمن فعّل الإشعارات.</span></div></div>`;
@@ -479,7 +484,7 @@ async function settings() {
       <div class="field"><label>رسالة الصيانة</label><input class="input" data-in="maintenanceMsg" maxlength="300" value="${esc(s.maintenanceMsg)}"></div>
       <div class="field"><label>وقت العودة المتوقع (توقيت ليبيا — اختياري للعد التنازلي)</label><input class="input ltr" type="datetime-local" data-in="maintenanceUntil" value="${untilLocal}"></div></div></div>
     <div class="panel"><h3>${icon('sparkle', 'ico-sm')} الواجهة</h3><div class="form-grid">
-      <div class="field"><label>شريط إعلان (اختياري)</label><input class="input" data-in="announcement" maxlength="200" value="${esc(s.announcement)}" placeholder="شحن فوري 24/7 ⚡"></div>
+      <div class="field"><label>شريط إعلان (اختياري)</label><input class="input" data-in="announcement" maxlength="200" value="${esc(s.announcement)}" placeholder="مثال: التوصيل متاح 24 ساعة"></div>
       <div class="field"><label>البانرات الرئيسية (حتى 8)</label><div class="form-grid" id="banners">${banners.map(bannerRow).join('')}</div>
       <button class="btn btn-ghost btn-sm" data-act="addBanner" style="justify-self:start">${icon('plus', 'ico-sm')} إضافة بانر</button></div></div></div>
     <div class="panel"><h3>${icon('wallet', 'ico-sm')} الإيداع وطرق الدفع</h3><div class="form-grid cols">
@@ -509,7 +514,7 @@ async function settings() {
       payments: Object.fromEntries(Object.keys(s.payments).map((k) => [k, { enabled: v(`p_${k}_enabled`).checked, label: v(`p_${k}_label`).value.trim(), number: v(`p_${k}_number`).value.trim(), note: v(`p_${k}_note`).value.trim() }])),
       social: Object.fromEntries(Object.keys(s.social).map((k) => [k, v(`s_${k}`).value.trim()])),
     };
-    try { await api('/api/admin/settings', { method: 'POST', body }); toast('تم حفظ الإعدادات ✅', 'ok'); } catch (e) { toast(e.message, 'bad', 5000); }
+    try { await api('/api/admin/settings', { method: 'POST', body }); toast('تم حفظ الإعدادات', 'ok'); } catch (e) { toast(e.message, 'bad', 5000); }
   });
 }
 

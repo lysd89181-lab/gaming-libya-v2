@@ -25,9 +25,16 @@ export function imgUrl(url) {
   if (/^[\w.\-\/]+\.(jpe?g|png|webp|gif)$/i.test(url) && !url.includes('..')) return 'legacy/' + url.split('/').pop();
   return '';
 }
+// بديل واقعي للصورة: أول كلمتين من اسم المنتج بدل أيقونة فارغة
+export function phText(alt) {
+  const words = String(alt || '').replace(/[^\p{L}\p{N}\s]/gu, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return icon('gamepad', 'ico-lg');
+  const main = words.slice(0, 2).join(' ');
+  return `<span>${esc(main.length > 18 ? main.slice(0, 18) : main)}</span>`;
+}
 export function imgTag(url, alt = '', cls = '') {
   const u = imgUrl(url);
-  if (!u) return `<div class="img-ph ${cls}">${icon('gamepad', 'ico-lg')}</div>`;
+  if (!u) return `<div class="img-ph ${esc(cls)}">${phText(alt)}</div>`;
   return `<img class="${esc(cls)}" src="${esc(u)}" alt="${esc(alt)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-ph>`;
 }
 // صورة مكسورة → بديل أنيق (بدون inline handlers عشان CSP)
@@ -36,7 +43,7 @@ document.addEventListener('error', (e) => {
   if (t && t.tagName === 'IMG' && t.hasAttribute('data-ph')) {
     const d = document.createElement('div');
     d.className = 'img-ph ' + (t.className || '');
-    d.innerHTML = icon('gamepad', 'ico-lg');
+    d.innerHTML = phText(t.alt);
     t.replaceWith(d);
   }
 }, true);
