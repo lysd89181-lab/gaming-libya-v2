@@ -1,19 +1,20 @@
 import {
   auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, captcha, loginWith, logout, onAuthStateChanged, enablePush, compressImage,
-} from './core.js?v=202610201844';
-import { icon, brand, CAT_ICONS } from './icons.js?v=202610201844';
+} from './core.js?v=202610201941';
+import { icon, brand, CAT_ICONS } from './icons.js?v=202610201941';
 
 const A = { user: null, cfg: null, tab: 'dash', actions: {}, timers: [], cat: null, stats: null, cap: null };
 const root = $('#root');
 const PAGES = [
-  ['dash', 'chart', 'الإحصائيات'], ['orders', 'receipt', 'الطلبات'], ['deposits', 'wallet', 'الإيداعات'],
-  ['categories', 'grid', 'الأقسام'], ['services', 'box', 'الخدمات والأكواد'], ['users', 'users', 'المستخدمين'],
+  ['dash', 'home', 'الرئيسية'], ['orders', 'receipt', 'الطلبات'], ['deposits', 'wallet', 'الإيداعات'],
+  ['categories', 'grid', 'الأقسام'], ['services', 'box', 'المنتجات والأكواد'], ['users', 'users', 'المستخدمين'],
   ['notify', 'bell', 'الإشعارات'], ['settings', 'settings', 'الإعدادات'],
 ];
+const MOBILE_TABS = ['dash', 'orders', 'deposits', 'services'];
 const ST = {
   completed: '<span class="badge badge-ok">مكتمل</span>', approved: '<span class="badge badge-ok">مقبول</span>',
-  pending: '<span class="badge badge-warn">معلّق</span>', rejected: '<span class="badge badge-bad">مرفوض</span>',
+  pending: '<span class="badge badge-warn">قيد التنفيذ</span>', rejected: '<span class="badge badge-bad">مرفوض</span>',
 };
 
 /* ---------- Events ---------- */
@@ -38,7 +39,7 @@ document.addEventListener('click', (e) => {
 /* ---------- Login (13) ---------- */
 function loginScreen(msg = '') {
   root.innerHTML = `<div class="login-wrap"><form class="login-card" id="f" novalidate>
-    <div style="display:flex;justify-content:center">${brand('ADMIN')}</div><h1>دخول الإدارة</h1><p>أدخل بيانات حساب الإدارة</p>
+    <div class="login-logo">${brand('ADMIN')}</div><h1>لوحة الإدارة</h1><p>أدخل بيانات حساب الإدارة</p>
     ${msg ? `<div class="announce" style="color:var(--bad);border-color:rgba(229,130,111,.3)">${icon('alert')}<span>${esc(msg)}</span></div>` : ''}
     <div class="field"><label>البريد الإلكتروني</label><div class="input-wrap">${icon('mail')}<input class="input has-ico ltr" name="email" type="email" autocomplete="username" placeholder="admin@example.com" required maxlength="100"></div></div>
     <div class="field"><label>كلمة المرور</label><div class="input-wrap">${icon('lock')}<input class="input has-ico" name="pw" type="password" autocomplete="current-password" required maxlength="64"></div></div>
@@ -61,14 +62,16 @@ function loginScreen(msg = '') {
 /* ---------- Shell ---------- */
 function shell() {
   root.innerHTML = `<div class="adm"><aside class="adm-side" id="side">
-      <div style="display:flex;justify-content:space-between;align-items:center">${brand('ADMIN')}</div>
+      <div class="side-brand">${brand('ADMIN')}</div>
       <nav class="nav" id="nav">${PAGES.map(([k, ic, t]) => `<button data-act="tab" data-k="${k}" class="${A.tab === k ? 'active' : ''}">${icon(ic)}<span>${t}</span><i class="nb hidden" data-nb="${k}"></i></button>`).join('')}</nav>
       <div class="side-user"><b>${icon('shield', 'ico-sm')} مدير النظام</b><span>${esc(A.user.email || A.user.uid)}</span>
         <button class="btn btn-soft btn-sm" data-act="theme">${icon(document.documentElement.getAttribute('data-theme') === 'light' ? 'moon' : 'sun', 'ico-sm')} تبديل الوضع</button>
         <button class="btn btn-soft btn-sm" data-act="push">${icon('bell', 'ico-sm')} إشعارات الطلبات</button>
-        <a class="btn btn-soft btn-sm" href="./" target="_blank" rel="noopener">${icon('home', 'ico-sm')} فتح المتجر</a>
+        <a class="btn btn-soft btn-sm" href="./" target="_blank" rel="noopener">${icon('store', 'ico-sm')} فتح المتجر</a>
         <button class="btn btn-danger btn-sm" data-act="logout">${icon('logout', 'ico-sm')} تسجيل الخروج</button></div>
-    </aside><main class="adm-main" id="main"></main></div>`;
+    </aside><main class="adm-main" id="main"></main>
+    <nav class="adm-tabs" id="mtabs">${MOBILE_TABS.map((k) => { const [, ic, t] = PAGES.find((x) => x[0] === k); return `<button data-act="tab" data-k="${k}">${icon(ic)}<span>${t === 'المنتجات والأكواد' ? 'المنتجات' : t}</span><i class="nb hidden" data-nb="${k}"></i></button>`; }).join('')}
+      <button data-act="menu" data-k="more">${icon('menu')}<span>المزيد</span></button></nav></div>`;
   A.actions.tab = (b) => { A.tab = b.dataset.k; store.set('gl_adm_tab', A.tab); closeSide(); renderTab(); };
   A.actions.theme = () => {
     const light = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -83,15 +86,17 @@ function shell() {
   A.actions.menu = () => { $('#side').classList.add('open'); const ov = document.createElement('div'); ov.className = 'side-ov'; ov.id = 'side-ov'; ov.onclick = closeSide; document.body.appendChild(ov); };
   renderTab();
   refreshBadges();
-  A.badgeTimer = setInterval(refreshBadges, 60000);
+  // عدّادات خفيفة (قراءتين) كل دقيقة ونص وفقط لما الصفحة ظاهرة
+  A.badgeTimer = setInterval(() => { if (!document.hidden) refreshBadges(); }, 90000);
 }
 function closeSide() { $('#side')?.classList.remove('open'); $('#side-ov')?.remove(); }
 async function refreshBadges() {
   try {
-    const s = await api('/api/admin/stats');
-    A.stats = s;
-    const set = (k, n) => { const el = $(`[data-nb="${k}"]`); if (el) { el.textContent = n; el.classList.toggle('hidden', !n); } };
-    set('orders', s.kpi.pendingOrders); set('deposits', s.kpi.pendingDeposits);
+    const b = await api('/api/admin/badges');
+    $$('[data-nb]').forEach((el) => {
+      const n = el.dataset.nb === 'orders' ? b.pendingOrders : el.dataset.nb === 'deposits' ? b.pendingDeposits : 0;
+      el.textContent = n; el.classList.toggle('hidden', !n);
+    });
   } catch {}
 }
 function top(title, tools = '') {
@@ -101,12 +106,12 @@ function renderTab() {
   A.timers.forEach(clearInterval); A.timers = [];
   const keep = { tab: A.actions.tab, logout: A.actions.logout, push: A.actions.push, menu: A.actions.menu, theme: A.actions.theme };
   A.actions = keep;
-  $$('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.k === A.tab));
+  $$('#nav button, #mtabs button').forEach((b) => b.classList.toggle('active', b.dataset.k === A.tab || (b.dataset.k === 'more' && !MOBILE_TABS.includes(A.tab))));
   const fn = { dash, orders, deposits, categories, services, users, notify, settings }[A.tab] || dash;
   window.scrollTo(0, 0);
   fn().catch((e) => { $('#main').innerHTML = top('خطأ') + `<div class="empty"><div class="ico-wrap">${icon('alert', 'ico-lg')}</div><b>تعذّر التحميل</b><span>${esc(e.message)}</span><button class="btn btn-ghost btn-sm" data-act="re">إعادة المحاولة</button></div>`; A.actions.re = renderTab; });
 }
-const loading = (t) => { $('#main').innerHTML = top(t) + '<div class="kpis">' + '<div class="sk" style="height:110px"></div>'.repeat(4) + '</div><div class="sk" style="height:260px;margin-top:14px"></div>'; };
+const loading = (t) => { $('#main').innerHTML = top(t) + '<div class="kpis">' + '<div class="sk" style="height:112px"></div>'.repeat(4) + '</div><div class="sk" style="height:240px;margin-top:16px"></div>'; };
 
 /* ---------- Charts (SVG) ---------- */
 function barChart(days, key, { h = 190 } = {}) {
@@ -119,7 +124,7 @@ function barChart(days, key, { h = 190 } = {}) {
     return `<rect x="${x + bw * 0.2}" y="${h - 18 - bh}" width="${bw * 0.6}" height="${bh}" rx="2" style="fill:var(--brand)"><title>${d.day}: ${fmt(d[key])}</title></rect>`;
   }).join('');
   const labels = days.map((d, i) => (i % 5 === 4 || i === n - 1 ? `<text x="${w - (i + 0.5) * bw}" y="${h - 3}" text-anchor="middle">${d.day.slice(5).replace('-', '/')}</text>` : '')).join('');
-  const grid = [0.25, 0.5, 0.75, 1].map((p) => `<line x1="0" x2="${w}" y1="${h - 18 - p * (h - 30)}" y2="${h - 18 - p * (h - 30)}" stroke="rgba(232,213,183,.07)"/>`).join('');
+  const grid = [0.25, 0.5, 0.75, 1].map((p) => `<line x1="0" x2="${w}" y1="${h - 18 - p * (h - 30)}" y2="${h - 18 - p * (h - 30)}" style="stroke:var(--line)"/>`).join('');
   return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img">${grid}${bars}${labels}<text x="${w}" y="10" text-anchor="end">${fmt(max)}</text></svg>`;
 }
 function lineChart(days, key, { h = 150 } = {}) {
@@ -136,36 +141,49 @@ function hbars(rows, valKey, labelKey, fmtV = (v) => fmt(v)) {
   return `<div class="hbar">${rows.map((r) => `<div class="r"><div><span>${esc(r[labelKey])}</span><b class="num">${fmtV(r[valKey], r)}</b></div><div class="track"><div class="fill" style="width:${Math.max(3, (r[valKey] / max) * 100)}%"></div></div></div>`).join('') || '<span class="muted">لا توجد بيانات بعد</span>'}</div>`;
 }
 
-/* ---------- Dashboard (clean tables) ---------- */
-async function dash() {
-  loading('الإحصائيات');
-  const s = await api('/api/admin/stats');
+/* ---------- Dashboard ---------- */
+function trend(cur, prev) {
+  if (!prev) return cur ? '<span class="tr up">جديد</span>' : '<span class="tr">0%</span>';
+  const p = Math.round(((cur - prev) / prev) * 100);
+  return `<span class="tr ${p > 0 ? 'up' : p < 0 ? 'down' : ''}"><span class="num">${p > 0 ? '+' : ''}${p}%</span></span>`;
+}
+async function dash(fresh = false) {
+  loading('الرئيسية');
+  const s = await api('/api/admin/stats' + (fresh ? '?fresh=1' : ''));
   A.stats = s;
   const k = s.kpi;
-  const m = (v) => `<span class="num">${fmt(v)}</span> د.ل`;
-  const n = (v) => `<span class="num">${v}</span>`;
-  const rows = [
-    ['مبيعات اليوم', m(k.revenueToday)], ['مبيعات آخر 7 أيام', m(k.revenue7)], ['مبيعات آخر 30 يوم', m(k.revenue30)], ['إجمالي المبيعات', m(k.revenueAll)],
-    [`<a href="#" data-act="go" data-k="orders">طلبات معلّقة</a>`, k.pendingOrders ? `<b style="color:var(--warn)">${n(k.pendingOrders)}</b>` : n(0)],
-    [`<a href="#" data-act="go" data-k="deposits">إيداعات معلّقة</a>`, k.pendingDeposits ? `<b style="color:var(--warn)">${n(k.pendingDeposits)}</b>` : n(0)],
-    ['عدد المستخدمين', n(k.users)], ['مجموع أرصدة العملاء', m(k.balances)], ['إيداعات مقبولة (30 يوم)', m(k.deposits30)],
-    ['طلبات مكتملة (الكل)', n(k.ordersCompletedAll)], ['طلبات تسليم تلقائي (30 يوم)', n(k.autoOrders30)], ['أكواد متاحة في المخزون', n(k.stockAvailable)],
+  const sum = (arr, key) => arr.reduce((a, d) => a + (d[key] || 0), 0);
+  const last7 = s.days.slice(-7), prev7 = s.days.slice(-14, -7);
+  const m = (v) => `<span class="num">${fmt(v)}</span> <small>د.ل</small>`;
+  const now = new Date();
+  const kpis = [
+    ['coin', 'إجمالي المبيعات', m(k.revenueAll), trend(sum(last7, 'revenue'), sum(prev7, 'revenue')), ''],
+    ['receipt', 'الطلبات المكتملة', `<span class="num">${k.ordersCompletedAll}</span>`, trend(sum(last7, 'orders'), sum(prev7, 'orders')), ''],
+    ['clock', 'الطلبات المعلّقة', `<span class="num">${k.pendingOrders}</span>`, k.pendingOrders ? '<span class="tr warn">تحتاج تنفيذ</span>' : '<span class="tr up">لا يوجد</span>', 'orders'],
+    ['wallet', 'الإيداعات المعلّقة', `<span class="num">${k.pendingDeposits}</span>`, k.pendingDeposits ? '<span class="tr warn">تحتاج مراجعة</span>' : '<span class="tr up">لا يوجد</span>', 'deposits'],
   ];
-  const last7 = s.days.slice(-7).reverse();
-  $('#main').innerHTML = top('الإحصائيات', `<button class="btn btn-soft btn-sm" data-act="re">${icon('refresh', 'ico-sm')} تحديث</button>`) + `
+  $('#main').innerHTML = top('الرئيسية', `<button class="btn btn-soft btn-sm" data-act="re">${icon('refresh', 'ico-sm')} تحديث</button>`) + `
+    <div class="hi"><h2>مرحباً بالمدير</h2><small class="num">${fmtDate(now.toISOString())}</small></div>
+    <div class="kpis">${kpis.map(([ic, t, v, tr, go]) => `<${go ? `button data-act="go" data-k="${go}"` : 'div'} class="kpi"><span class="ki">${icon(ic)}</span><small>${t}</small><b>${v}</b>${tr}</${go ? 'button' : 'div'}>`).join('')}</div>
+    <div class="panel"><h3>ملخص مالي</h3><div class="fin">
+      <div><small>مبيعات اليوم</small><b>${m(k.revenueToday)}</b></div>
+      <div><small>إيداعات 30 يوم</small><b>${m(k.deposits30)}</b></div>
+      <div><small>أرصدة العملاء</small><b>${m(k.balances)}</b></div></div></div>
+    <div class="panel"><h3>المبيعات خلال آخر 7 أيام <small>د.ل</small></h3>${lineChart(last7, 'revenue')}</div>
     <div class="panels two">
-      <div class="panel"><h3>ملخص</h3><table class="tbl kv2"><tbody>${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>
+      <div class="panel"><h3>المبيعات اليومية <small>آخر 30 يوم</small></h3>${barChart(s.days, 'revenue')}</div>
       <div class="panel"><h3>آخر 7 أيام</h3><table class="tbl"><thead><tr><th>اليوم</th><th>الطلبات</th><th>المبيعات</th><th>الإيداعات</th></tr></thead><tbody>
-        ${last7.map((d) => `<tr><td class="num">${d.day.slice(5).replace('-', '/')}</td><td class="num">${d.orders}</td><td class="num">${fmt(d.revenue)}</td><td class="num">${fmt(d.deposits)}</td></tr>`).join('')}</tbody></table></div>
+        ${[...last7].reverse().map((d) => `<tr><td class="num">${d.day.slice(5).replace('-', '/')}</td><td class="num">${d.orders}</td><td class="num">${fmt(d.revenue)}</td><td class="num">${fmt(d.deposits)}</td></tr>`).join('')}</tbody></table></div>
     </div>
-    <div class="panel" style="margin-top:14px"><h3>المبيعات اليومية <small>آخر 30 يوم · د.ل</small></h3>${barChart(s.days, 'revenue')}</div>
     <div class="panels two">
-      <div class="panel"><h3>الأكثر مبيعاً <small>30 يوم</small></h3>${s.top.length ? `<table class="tbl"><thead><tr><th>الخدمة</th><th>العدد</th><th>المبيعات</th></tr></thead><tbody>${s.top.map((t) => `<tr><td>${esc(t.title)}</td><td class="num">${t.count}</td><td class="num">${fmt(t.revenue)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">لا توجد بيانات بعد</span>'}</div>
+      <div class="panel"><h3>الأكثر مبيعاً <small>30 يوم</small></h3>${s.top.length ? `<table class="tbl"><thead><tr><th>المنتج</th><th>العدد</th><th>المبيعات</th></tr></thead><tbody>${s.top.map((t) => `<tr><td>${esc(t.title)}</td><td class="num">${t.count}</td><td class="num">${fmt(t.revenue)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">لا توجد بيانات بعد</span>'}</div>
       <div class="panel"><h3>الإيداعات حسب الطريقة <small>30 يوم</small></h3>${s.methods.length ? `<table class="tbl"><thead><tr><th>الطريقة</th><th>المبلغ</th></tr></thead><tbody>${s.methods.map((x) => `<tr><td>${esc(x.label)}</td><td class="num">${fmt(x.value)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">لا توجد بيانات بعد</span>'}</div>
     </div>
-    ${s.warnings && s.warnings.length ? `<div class="panel" style="margin-top:14px;border-color:rgba(217,122,108,.4)"><h3 style="color:var(--bad)">أجزاء لم تُحسب</h3>${s.warnings.map((w) => `<code style="display:block;direction:ltr;text-align:left;overflow-wrap:anywhere;font-size:11.5px;margin-top:6px">${esc(w)}</code>`).join('')}</div>` : ''}
-    <p class="muted" style="font-size:12px;margin-top:12px">آخر تحديث: ${fmtDate(new Date(s.at).toISOString(), true)}</p>`;
-  A.actions.re = renderTab;
+    <div class="panel"><h3>أرقام أخرى</h3><table class="tbl kv2"><tbody>
+      ${[['المستخدمين', `<span class="num">${k.users}</span>`], ['مبيعات آخر 7 أيام', m(k.revenue7)], ['مبيعات آخر 30 يوم', m(k.revenue30)], ['طلبات تسليم تلقائي 30 يوم', `<span class="num">${k.autoOrders30}</span>`], ['أكواد متاحة في المخزون', `<span class="num">${k.stockAvailable}</span>`]].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>
+    ${s.warnings && s.warnings.length ? `<div class="panel warn-panel"><h3>أجزاء لم تُحسب</h3>${s.warnings.map((w) => `<code>${esc(w)}</code>`).join('')}</div>` : ''}
+    <p class="muted" style="font-size:12px;margin-top:12px">آخر تحديث ${fmtDate(new Date(s.at).toISOString(), true)} والأرقام تتحدث كل 5 دقائق</p>`;
+  A.actions.re = () => dash(true).catch((e) => toast(e.message, 'bad'));
   A.actions.go = (b) => { A.tab = b.dataset.k; renderTab(); };
 }
 
@@ -177,16 +195,15 @@ async function orders() {
   let q = '';
   const sel = new Set();
   const draw = () => {
-    $('#flt').innerHTML = [['pending', 'معلّقة'], ['completed', 'مكتملة'], ['rejected', 'مرفوضة'], ['all', 'الكل']].map(([k2, t]) => `<button class="chip ${A.ordStatus === k2 ? 'active' : ''}" data-act="st" data-k="${k2}">${t}</button>`).join('') +
-      `<input class="input" id="q" placeholder="بحث: اسم خدمة بيانات..." value="${esc(q)}">`;
+    $('#flt').innerHTML = `<div class="searchbar">${icon('search')}<input id="q" placeholder="ابحث عن طلب أو عميل أو بيانات" value="${esc(q)}"></div><div class="chips">` + [['pending', 'قيد التنفيذ'], ['completed', 'مكتملة'], ['rejected', 'مرفوضة'], ['all', 'الكل']].map(([k2, t]) => `<button class="chip ${A.ordStatus === k2 ? 'active' : ''}" data-act="st" data-k="${k2}">${t}</button>`).join('') + '</div>';
     const t = q.toLowerCase();
     const list = r.orders.filter((o) => !t || [o.title, o.userName, o.userEmail, o.input, o.id, o.contactPhone].some((v) => String(v || '').toLowerCase().includes(t)));
     $('#list').innerHTML = list.length ? list.map((o) => `<div class="item ${o.status === 'pending' ? 'pending' : ''}">
       <div class="item-top">${o.status !== 'pending' ? `<label class="check"><input type="checkbox" data-sel="${esc(o.id)}" ${sel.has(o.id) ? 'checked' : ''}></label>` : ''}<span class="th">${imgTag(o.image, o.title)}</span>
-        <div class="tt"><b>${esc(o.title)}</b><small>${esc(o.userName || '—')} • ${esc(o.userEmail || '')}</small><small><span class="num">#${esc(o.id.slice(0, 8).toUpperCase())}</span> • ${timeAgo(o.createdAt)} • ${o.delivery === 'auto' ? 'تلقائي' : 'يدوي'}</small></div>
+        <div class="tt"><b>${esc(o.title)}</b><small class="num">#GL-${esc(o.id.slice(0, 6).toUpperCase())}</small><small>${esc(o.userName || 'بدون اسم')} <span class="sep"></span> ${timeAgo(o.createdAt)} <span class="sep"></span> ${o.delivery === 'auto' ? 'تلقائي' : 'يدوي'}</small></div>
         <div class="amt"><b>${money(o.total)}</b>${ST[o.status] || ''}</div></div>
-      <div class="item-data"><span class="lbl">البيانات:</span><code>${esc(o.input || '—')}</code>${o.input ? `<button class="btn btn-soft btn-xs" data-copy="${esc(o.input)}">${icon('copy', 'ico-sm')}</button>` : ''}</div>
-      ${o.contactPhone ? `<div class="item-data"><span class="lbl">التواصل:</span><code>${esc(o.contactPhone)}</code><a class="btn btn-soft btn-xs" target="_blank" rel="noopener" href="https://wa.me/${esc(o.contactPhone.replace(/\D/g, '').replace(/^0/, '218'))}">${icon('whatsapp', 'ico-sm')}</a></div>` : ''}
+      <div class="item-data"><span class="lbl">البيانات</span><code>${esc(o.input || 'لا يوجد')}</code>${o.input ? `<button class="btn btn-soft btn-xs" data-copy="${esc(o.input)}">${icon('copy', 'ico-sm')}</button>` : ''}</div>
+      ${o.contactPhone ? `<div class="item-data"><span class="lbl">التواصل</span><code>${esc(o.contactPhone)}</code><a class="btn btn-soft btn-xs" target="_blank" rel="noopener" href="https://wa.me/${esc(o.contactPhone.replace(/\D/g, '').replace(/^0/, '218'))}">${icon('whatsapp', 'ico-sm')}</a></div>` : ''}
       <div class="item-act">${o.status === 'pending' ? `<button class="btn btn-ok btn-sm" data-act="done" data-id="${esc(o.id)}">${icon('check', 'ico-sm')} تنفيذ</button><button class="btn btn-danger btn-sm" data-act="rej" data-id="${esc(o.id)}">${icon('x', 'ico-sm')} رفض وإرجاع</button>` : ''}
         <button class="btn btn-soft btn-sm" data-act="view" data-id="${esc(o.id)}">${icon('info', 'ico-sm')} التفاصيل</button></div></div>`).join('')
       : `<div class="empty"><div class="ico-wrap">${icon('receipt', 'ico-lg')}</div><b>لا توجد طلبات</b></div>`;
@@ -199,8 +216,8 @@ async function orders() {
   A.actions.done = async (b) => {
     const o = r.orders.find((x) => x.id === b.dataset.id);
     const v = await confirmSheet({
-      title: 'تنفيذ الطلب', text: `${esc(o.title)} · ${money(o.total)}<br><span class="muted">البيانات: ${esc(o.input)}</span>`, ok: 'تأكيد التنفيذ',
-      inputs: `<div class="form-grid"><div class="field"><label>كود / بيانات التسليم (اختياري · تظهر للعميل مشفّرة)</label><textarea class="textarea" data-in="delivery" maxlength="2000" placeholder="مثال: XXXX-XXXX-XXXX"></textarea></div>
+      title: 'تنفيذ الطلب', text: `${esc(o.title)} <b>${money(o.total)}</b><br><span class="muted">البيانات ${esc(o.input)}</span>`, ok: 'تأكيد التنفيذ',
+      inputs: `<div class="form-grid"><div class="field"><label>كود أو بيانات التسليم (اختياري وتظهر للعميل مشفّرة)</label><textarea class="textarea" data-in="delivery" maxlength="2000" placeholder="مثال: XXXX-XXXX-XXXX"></textarea></div>
         <div class="field"><label>ملاحظة للعميل (اختياري)</label><input class="input" data-in="note" maxlength="300" placeholder="تم الشحن بنجاح"></div></div>`,
     });
     if (!v) return;
@@ -216,14 +233,14 @@ async function orders() {
     try {
       const o = await api('/api/admin/orders/' + encodeURIComponent(b.dataset.id));
       sheet(`<h3>تفاصيل الطلب</h3><div class="tbl-mini" style="margin-top:12px">
-        ${[['رقم الطلب', o.id], ['الخدمة', o.title], ['العميل', `${o.userName} · ${o.userEmail}`], ['البيانات', o.input], ['الكمية', o.quantity], ['المبلغ', fmt(o.total) + ' د.ل'], ['الحالة', o.status], ['التسليم', o.delivery === 'auto' ? 'تلقائي' : 'يدوي'], ['التاريخ', fmtDate(o.createdAt, true)], ['التواصل', o.contactPhone], ['ملاحظة', o.note], ['سبب الرفض', o.reason]].filter(([, v]) => v !== '' && v !== undefined && v !== null).map(([k2, v]) => `<div><span class="muted">${k2}</span><span>${esc(v)}</span></div>`).join('')}</div>
+        ${[['رقم الطلب', '#GL-' + o.id.slice(0, 6).toUpperCase()], ['الخدمة', o.title], ['العميل', o.userName], ['البريد', o.userEmail], ['البيانات', o.input], ['الكمية', o.quantity], ['المبلغ', fmt(o.total) + ' د.ل'], ['الحالة', o.status], ['التسليم', o.delivery === 'auto' ? 'تلقائي' : 'يدوي'], ['التاريخ', fmtDate(o.createdAt, true)], ['التواصل', o.contactPhone], ['ملاحظة', o.note], ['سبب الرفض', o.reason]].filter(([, v]) => v !== '' && v !== undefined && v !== null).map(([k2, v]) => `<div><span class="muted">${k2}</span><span>${esc(v)}</span></div>`).join('')}</div>
         ${o.codes.length ? `<h3 style="margin-top:16px">الأكواد المسلّمة</h3><div class="code-list">${o.codes.map((c) => `<div><code>${esc(c)}</code><button class="btn btn-soft btn-xs" data-copy="${esc(c)}">${icon('copy', 'ico-sm')}</button></div>`).join('')}</div>` : ''}
         <button class="btn btn-soft btn-block" style="margin-top:16px" data-act="closeS">إغلاق</button>`, { center: true });
       A.actions.closeS = closeSheet;
     } catch (e) { toast(e.message, 'bad'); }
   };
   A.actions.delSel = async () => {
-    if (!(await confirmSheet({ title: `حذف ${sel.size} طلب؟`, text: 'لا يمكن التراجع (الطلبات المعلّقة لا تُحذف)', ok: 'حذف', danger: true }))) return;
+    if (!(await confirmSheet({ title: `حذف ${sel.size} طلب؟`, text: 'لا يمكن التراجع والطلبات المعلّقة لا تُحذف', ok: 'حذف', danger: true }))) return;
     try { const x = await api('/api/admin/orders-delete', { method: 'POST', body: { ids: [...sel] } }); toast(`تم حذف ${x.deleted} طلب`, 'ok'); renderTab(); } catch (e) { toast(e.message, 'bad'); }
   };
   draw();
@@ -234,14 +251,14 @@ async function deposits() {
   A.depStatus = A.depStatus || 'pending';
   $('#main').innerHTML = top('الإيداعات', `<button class="btn btn-soft btn-sm" data-act="re">${icon('refresh', 'ico-sm')}</button>`) + `<div class="filters" id="flt"></div><div class="items" id="list"><div class="sk" style="height:140px"></div></div>`;
   const r = await api('/api/admin/deposits?status=' + A.depStatus);
-  $('#flt').innerHTML = [['pending', 'معلّقة'], ['approved', 'مقبولة'], ['rejected', 'مرفوضة'], ['all', 'الكل']].map(([k, t]) => `<button class="chip ${A.depStatus === k ? 'active' : ''}" data-act="st" data-k="${k}">${t}</button>`).join('');
+  $('#flt').innerHTML = '<div class="chips">' + [['pending', 'قيد المراجعة'], ['approved', 'مقبولة'], ['rejected', 'مرفوضة'], ['all', 'الكل']].map(([k, t]) => `<button class="chip ${A.depStatus === k ? 'active' : ''}" data-act="st" data-k="${k}">${t}</button>`).join('') + '</div>';
   $('#list').innerHTML = r.deposits.length ? r.deposits.map((d) => `<div class="item ${d.status === 'pending' ? 'pending' : ''}">
     <div class="item-top"><span class="th"><span class="img-ph">${icon(d.method === 'crypto' ? 'crypto' : d.method === 'cards' ? 'card' : d.method === 'onepay' || d.method === 'lypay' ? 'bank' : 'sim')}</span></span>
-      <div class="tt"><b>${esc(d.provider || d.method)}</b><small>${esc(d.userName || '—')} • ${esc(d.userEmail || '')}</small><small>${timeAgo(d.createdAt)}${d.userPhone ? ` • <span class="num">${esc(d.userPhone)}</span>` : ''}</small></div>
+      <div class="tt"><b>${esc(d.provider || d.method)}</b><small class="num">#DEP-${esc(d.id.slice(0, 6).toUpperCase())}</small><small>${esc(d.userName || 'بدون اسم')} <span class="sep"></span> ${timeAgo(d.createdAt)}${d.userPhone ? ` <span class="sep"></span> <span class="num">${esc(d.userPhone)}</span>` : ''}</small></div>
       <div class="amt"><b>${money(d.approvedAmount ?? d.amount)}</b>${ST[d.status] || ''}${d.crypto ? `<small class="muted num">${fmt(d.crypto)} USDT</small>` : ''}</div></div>
-    <div class="item-data"><span class="lbl">${d.method === 'cards' ? 'الكرت:' : d.method === 'crypto' ? 'المعرّف:' : d.senderName ? 'المحوّل:' : 'من رقم:'}</span><code id="ref-${esc(d.id)}">${esc(d.senderName || d.ref || '—')}</code>
+    <div class="item-data"><span class="lbl">${d.method === 'cards' ? 'الكرت' : d.method === 'crypto' ? 'المعرّف' : d.senderName ? 'المحوّل' : 'من رقم'}</span><code id="ref-${esc(d.id)}">${esc(d.senderName || d.ref || 'لا يوجد')}</code>
       ${d.hasSecret ? `<button class="btn btn-soft btn-xs" data-act="reveal" data-id="${esc(d.id)}">${icon('eye', 'ico-sm')} إظهار</button>` : d.ref ? `<button class="btn btn-soft btn-xs" data-copy="${esc(d.senderName || d.ref)}">${icon('copy', 'ico-sm')}</button>` : ''}</div>
-    ${d.reason ? `<small class="muted">سبب الرفض: ${esc(d.reason)}</small>` : ''}
+    ${d.reason ? `<small class="muted">سبب الرفض ${esc(d.reason)}</small>` : ''}
     ${d.status === 'pending' ? `<div class="item-act"><button class="btn btn-ok btn-sm" data-act="ok" data-id="${esc(d.id)}">${icon('check', 'ico-sm')} قبول وإضافة الرصيد</button><button class="btn btn-danger btn-sm" data-act="no" data-id="${esc(d.id)}">${icon('x', 'ico-sm')} رفض</button></div>` : ''}</div>`).join('')
     : `<div class="empty"><div class="ico-wrap">${icon('wallet', 'ico-lg')}</div><b>لا توجد إيداعات</b></div>`;
   A.actions.re = renderTab;
@@ -251,8 +268,8 @@ async function deposits() {
   });
   A.actions.ok = async (b) => {
     const d = r.deposits.find((x) => x.id === b.dataset.id);
-    const v = await confirmSheet({ title: 'قبول الإيداع', text: `${esc(d.userName)} · ${esc(d.provider)}`, ok: 'قبول وإضافة',
-      inputs: `<div class="field"><label>المبلغ المضاف للمحفظة (د.ل) · عدّله لو المبلغ المستلم مختلف</label><input class="input ltr" type="number" step="0.01" min="0.01" data-in="amount" value="${d.amount}"></div>` });
+    const v = await confirmSheet({ title: 'قبول الإيداع', text: `${esc(d.userName)} عبر ${esc(d.provider)}`, ok: 'قبول وإضافة',
+      inputs: `<div class="field"><label>المبلغ المضاف للمحفظة (د.ل) وعدّله لو المبلغ المستلم مختلف</label><input class="input ltr" type="number" step="0.01" min="0.01" data-in="amount" value="${d.amount}"></div>` });
     if (!v) return;
     try { await api(`/api/admin/deposits/${encodeURIComponent(d.id)}/approve`, { method: 'POST', body: { amount: v.amount } }); toast('تمت إضافة الرصيد وإشعار العميل', 'ok'); renderTab(); refreshBadges(); } catch (e) { toast(e.message, 'bad'); }
   };
@@ -305,15 +322,30 @@ function formSheet(html, onSave, { wide = false } = {}) {
 }
 async function loadCat(force = false) { if (!A.cat || force) A.cat = await api('/api/admin/catalog'); return A.cat; }
 
+/* ---------- Quick toggles (field واحد) ---------- */
+function bindToggles(box, after) {
+  $$('[data-tg]', box).forEach((inp) => inp.addEventListener('change', async () => {
+    inp.disabled = true;
+    try {
+      await api(`/api/admin/${inp.dataset.tg}/${encodeURIComponent(inp.dataset.id)}/toggle`, { method: 'POST', body: { on: inp.checked } });
+      toast(inp.checked ? 'ظاهر في المتجر' : 'مخفي من المتجر', 'ok', 1400);
+      after?.(inp.dataset.id, inp.checked);
+    } catch (e) { inp.checked = !inp.checked; toast(e.message, 'bad'); }
+    inp.disabled = false;
+  }));
+}
+
 /* ---------- Categories ---------- */
 async function categories() {
-  $('#main').innerHTML = top('الأقسام', `<button class="btn btn-primary btn-sm" data-act="add">${icon('plus', 'ico-sm')} قسم جديد</button>`) + '<div class="grid-cards" id="list"><div class="sk" style="height:200px"></div></div>';
+  $('#main').innerHTML = top('الأقسام', `<button class="btn btn-primary btn-sm" data-act="add">${icon('plus', 'ico-sm')} إضافة قسم</button>`) + '<div class="arows" id="list"><div class="sk" style="height:72px"></div><div class="sk" style="height:72px"></div></div>';
   const c = await loadCat(true);
   const count = (id) => c.services.filter((s) => s.category === id).length;
-  $('#list').innerHTML = c.categories.length ? c.categories.map((x) => `<div class="g-card"><div class="gm">${x.icon ? `<div class="img-ph">${icon(x.icon, 'ico-lg')}</div>` : imgTag(x.image, x.name)}${x.hidden ? '<span class="badge badge-bad">مخفي</span>' : ''}</div>
-    <div class="gb"><b>${esc(x.name)}</b><small class="muted">${count(x.id)} خدمة • ترتيب ${x.order}</small>
-    <div style="display:flex;gap:6px"><button class="btn btn-soft btn-xs" style="flex:1" data-act="edit" data-id="${esc(x.id)}">${icon('edit', 'ico-sm')} تعديل</button><button class="btn btn-danger btn-xs" data-act="del" data-id="${esc(x.id)}" aria-label="حذف">${icon('trash', 'ico-sm')}</button></div></div></div>`).join('')
-    : `<div class="empty" style="grid-column:1/-1"><div class="ico-wrap">${icon('grid', 'ico-lg')}</div><b>لا توجد أقسام</b></div>`;
+  $('#list').innerHTML = c.categories.length ? c.categories.map((x) => `<div class="arow"><span class="th">${imgUrl(x.image) ? imgTag(x.image, x.name) : `<span class="img-ph">${icon(x.icon || 'grid')}</span>`}</span>
+    <div class="at"><b>${esc(x.name)}</b><small><span class="num">${count(x.id)}</span> منتج <span class="sep"></span> ترتيب <span class="num">${x.order}</span></small></div>
+    <div class="acts"><label class="switch" title="إظهار في المتجر"><input type="checkbox" data-tg="categories" data-id="${esc(x.id)}" ${x.hidden ? '' : 'checked'} aria-label="إظهار"></label>
+    <button class="btn-icon sm" data-act="edit" data-id="${esc(x.id)}" aria-label="تعديل">${icon('edit')}</button><button class="btn-icon sm danger" data-act="del" data-id="${esc(x.id)}" aria-label="حذف">${icon('trash')}</button></div></div>`).join('')
+    : `<div class="empty"><div class="ico-wrap">${icon('grid', 'ico-lg')}</div><b>لا توجد أقسام</b></div>`;
+  bindToggles($('#list'));
   const form = (x = {}) => formSheet(`<h3>${x.id ? 'تعديل قسم' : 'قسم جديد'}</h3><div class="form-grid" style="margin-top:12px">
     <div class="field"><label>اسم القسم</label><input class="input" data-in="name" maxlength="40" value="${esc(x.name || '')}"></div>
     <div class="field"><label>أيقونة القسم <span class="muted">(تظهر بدل الصورة)</span></label><input type="hidden" data-in="icon" value="${esc(x.icon || '')}">
@@ -333,25 +365,31 @@ async function categories() {
 
 /* ---------- Services + stock ---------- */
 async function services() {
-  $('#main').innerHTML = top('الخدمات والأكواد', `<button class="btn btn-primary btn-sm" data-act="add">${icon('plus', 'ico-sm')} خدمة جديدة</button>`) + '<div class="filters" id="flt"></div><div class="items" id="list"><div class="sk" style="height:80px"></div></div>';
+  $('#main').innerHTML = top('المنتجات والأكواد', `<button class="btn btn-primary btn-sm" data-act="add">${icon('plus', 'ico-sm')} إضافة منتج</button>`) + '<div class="filters" id="flt"></div><div class="arows" id="list"><div class="sk" style="height:72px"></div></div>';
   const c = await loadCat(true);
   A.svcCat = A.svcCat || '';
   let q = '';
-  const catName = (id) => c.categories.find((x) => x.id === id)?.name || '—';
-  $('#flt').innerHTML = `<select class="select" id="cs"><option value="">كل الأقسام</option>${c.categories.map((x) => `<option value="${esc(x.id)}" ${A.svcCat === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select><input class="input" id="q" placeholder="بحث عن خدمة...">`;
+  const catName = (id) => c.categories.find((x) => x.id === id)?.name || 'بدون قسم';
+  const auto = c.services.filter((s) => s.autoDelivery);
+  const stockTotal = auto.reduce((a, s) => a + (s.stockAvailable || 0), 0);
+  const low = auto.filter((s) => (s.stockAvailable || 0) < 5).length;
+  $('#flt').innerHTML = `<div class="kpis three"><div class="kpi"><small>المنتجات</small><b class="num">${c.services.length}</b></div><div class="kpi"><small>أكواد متاحة</small><b class="num">${stockTotal}</b></div><div class="kpi"><small>مخزون منخفض</small><b class="num" style="color:${low ? 'var(--warn)' : 'inherit'}">${low}</b></div></div>
+    <div class="searchbar">${icon('search')}<input id="q" placeholder="ابحث عن منتج"></div><select class="select" id="cs"><option value="">كل الأقسام</option>${c.categories.map((x) => `<option value="${esc(x.id)}" ${A.svcCat === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`;
   const draw = () => {
     const t = q.toLowerCase();
     const list = c.services.filter((s) => (!A.svcCat || s.category === A.svcCat) && (!t || s.title.toLowerCase().includes(t)));
-    $('#list').innerHTML = list.length ? list.map((s) => `<div class="svc-row"><span class="th">${imgTag(s.image, s.title)}</span>
-      <div style="min-width:0"><b>${esc(s.title)}</b><div class="meta"><span class="badge badge-gold">${money(s.finalPrice)}</span>${s.discount ? `<span class="badge badge-bad num">-${s.discount}%</span>` : ''}
-        ${s.active ? '' : '<span class="badge badge-bad">معطّلة</span>'}${s.autoDelivery ? `<span class="badge ${s.stockAvailable ? 'badge-ok' : 'badge-bad'}">${icon('bolt', 'ico-sm')} <span class="num">${s.stockAvailable}</span> كود</span>` : ''}${s.enableQuantity ? '<span class="badge badge-info">كمية</span>' : ''}<span class="badge badge-info">${esc(catName(s.category))}</span></div></div>
-      <div class="acts">${s.autoDelivery ? `<button class="btn btn-ok btn-xs" data-act="stock" data-id="${esc(s.id)}">${icon('key', 'ico-sm')}</button>` : ''}<button class="btn btn-soft btn-xs" data-act="edit" data-id="${esc(s.id)}">${icon('edit', 'ico-sm')}</button><button class="btn btn-danger btn-xs" data-act="del" data-id="${esc(s.id)}">${icon('trash', 'ico-sm')}</button></div></div>`).join('')
-      : `<div class="empty"><div class="ico-wrap">${icon('box', 'ico-lg')}</div><b>لا توجد خدمات</b></div>`;
+    $('#list').innerHTML = list.length ? list.map((s) => `<div class="arow"><span class="th">${imgTag(s.image, s.title)}</span>
+      <div class="at"><b>${esc(s.title)}</b><small>${esc(catName(s.category))} <span class="sep"></span> <span class="pr">${s.enableQuantity ? 'بالكمية' : money(s.finalPrice)}</span>${s.discount ? ` <span class="badge badge-bad num">-${s.discount}%</span>` : ''}</small>
+        ${s.autoDelivery ? `<small><span class="badge ${s.stockAvailable >= 5 ? 'badge-ok' : s.stockAvailable ? 'badge-warn' : 'badge-bad'}">${icon('bolt', 'ico-sm')} <span class="num">${s.stockAvailable}</span> كود</span></small>` : ''}</div>
+      <div class="acts"><label class="switch" title="تفعيل"><input type="checkbox" data-tg="services" data-id="${esc(s.id)}" ${s.active ? 'checked' : ''} aria-label="تفعيل"></label>
+        ${s.autoDelivery ? `<button class="btn-icon sm ok" data-act="stock" data-id="${esc(s.id)}" aria-label="الأكواد">${icon('key')}</button>` : ''}<button class="btn-icon sm" data-act="edit" data-id="${esc(s.id)}" aria-label="تعديل">${icon('edit')}</button><button class="btn-icon sm danger" data-act="del" data-id="${esc(s.id)}" aria-label="حذف">${icon('trash')}</button></div></div>`).join('')
+      : `<div class="empty"><div class="ico-wrap">${icon('box', 'ico-lg')}</div><b>لا توجد منتجات</b></div>`;
+    bindToggles($('#list'), (id, on) => { const x = c.services.find((y) => y.id === id); if (x) x.active = on; });
   };
   $('#cs').onchange = (e) => { A.svcCat = e.target.value; draw(); };
   $('#q').oninput = (e) => { q = e.target.value; draw(); };
   const form = (s = {}) => {
-    const sh = formSheet(`<h3>${s.id ? 'تعديل خدمة' : 'خدمة جديدة'}</h3><div class="form-grid cols" style="margin-top:12px">
+    const sh = formSheet(`<h3>${s.id ? 'تعديل منتج' : 'منتج جديد'}</h3><div class="form-grid cols" style="margin-top:12px">
       <div class="field full"><label>اسم الخدمة</label><input class="input" data-in="title" maxlength="80" value="${esc(s.title || '')}"></div>
       <div class="field"><label>القسم</label><select class="select" data-in="category">${c.categories.map((x) => `<option value="${esc(x.id)}" ${(s.category || A.svcCat) === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
       <div class="field"><label>السعر (د.ل)</label><input class="input ltr" type="number" step="0.001" min="0" data-in="price" value="${s.price ?? ''}"></div>
@@ -393,7 +431,7 @@ async function stockSheet(s) {
   const load = async () => {
     const r = await api(`/api/admin/services/${encodeURIComponent(s.id)}/stock`);
     $('#stk', sh).innerHTML = `<div class="kpis" style="grid-template-columns:1fr 1fr;margin-top:12px"><div class="kpi"><small>متاحة</small><b class="num" style="color:var(--ok)">${r.available}</b></div><div class="kpi"><small>مباعة</small><b class="num">${r.sold}</b></div></div>
-      <div class="field" style="margin-top:14px"><label>إضافة أكواد (كود في كل سطر · الأكواد تُخزّن مشفّرة)</label><textarea class="textarea ltr" id="codes" style="direction:ltr;text-align:left;min-height:130px" placeholder="XXXX-XXXX-XXXX&#10;YYYY-YYYY-YYYY"></textarea></div>
+      <div class="field" style="margin-top:14px"><label>إضافة أكواد (كود في كل سطر والأكواد تُخزّن مشفّرة)</label><textarea class="textarea ltr" id="codes" style="direction:ltr;text-align:left;min-height:130px" placeholder="XXXX-XXXX-XXXX&#10;YYYY-YYYY-YYYY"></textarea></div>
       <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="addCodes">${icon('plus', 'ico-sm')} إضافة الأكواد</button>
       <h3 style="margin-top:18px;font-size:15px">آخر الأكواد</h3><div class="code-list">${r.codes.map((c) => `<div><code>${esc(c.hint)}</code><span>${c.status === 'available' ? '<span class="badge badge-ok">متاح</span>' : `<span class="badge badge-info">مباع ${timeAgo(c.soldAt)}</span>`}</span>
         ${c.status === 'available' ? `<button class="btn btn-danger btn-xs" data-act="delCode" data-id="${esc(c.id)}">${icon('trash', 'ico-sm')}</button>` : ''}</div>`).join('') || '<span class="muted">لا توجد أكواد بعد</span>'}</div>
@@ -406,7 +444,7 @@ async function stockSheet(s) {
     try {
       let added = 0, dup = 0;
       for (let i = 0; i < codes.length; i += 400) { const x = await api(`/api/admin/services/${encodeURIComponent(s.id)}/stock`, { method: 'POST', body: { codes: codes.slice(i, i + 400) } }); added += x.added; dup += x.duplicates; }
-      toast(`أُضيف ${added} كود${dup ? ` · ${dup} مكرر تم تجاهله` : ''}`, 'ok', 4000); await load();
+      toast(`أُضيف ${added} كود${dup ? ` وتم تجاهل ${dup} مكرر` : ''}`, 'ok', 4000); await load();
     } catch (e) { toast(e.message, 'bad'); }
   });
   A.actions.delCode = async (b) => {
@@ -417,14 +455,14 @@ async function stockSheet(s) {
 
 /* ---------- Users ---------- */
 async function users() {
-  $('#main').innerHTML = top('المستخدمين') + `<div class="filters"><input class="input" id="q" placeholder="بحث: اسم بريد هاتف..." style="max-width:360px"></div><p class="muted" id="cnt" style="font-size:13px"></p><div class="items" id="list"><div class="sk" style="height:80px"></div></div>`;
+  $('#main').innerHTML = top('المستخدمين') + `<div class="filters"><div class="searchbar">${icon('search')}<input id="q" placeholder="ابحث بالاسم أو البريد أو الهاتف"></div></div><p class="muted" id="cnt" style="font-size:13px"></p><div class="arows" id="list"><div class="sk" style="height:72px"></div></div>`;
   let timer;
   const load = async (q = '') => {
     const r = await api('/api/admin/users?q=' + encodeURIComponent(q));
-    $('#cnt').textContent = `إجمالي المستخدمين: ${r.total}${q ? ` · النتائج: ${r.users.length}` : ''}`;
-    $('#list').innerHTML = r.users.length ? r.users.map((u) => `<button class="svc-row" style="text-align:right;width:100%" data-act="user" data-id="${esc(u.uid)}"><span class="avatar" style="width:46px;height:46px">${esc((u.name || '?').charAt(0))}</span>
-      <div style="min-width:0"><b>${esc(u.name || '—')} ${u.blocked ? '<span class="badge badge-bad">موقوف</span>' : ''}</b><small class="muted" style="direction:ltr;display:block;text-align:right">${esc(u.email)} ${u.phone ? '• ' + esc(u.phone) : ''}</small></div>
-      <div class="o-side" style="display:grid;justify-items:end"><b class="gold">${money(u.balance)}</b><small class="muted">${fmtDate(u.createdAt)}</small></div></button>`).join('')
+    $('#cnt').textContent = `إجمالي المستخدمين ${r.total}${q ? ` والنتائج ${r.users.length}` : ''}`;
+    $('#list').innerHTML = r.users.length ? r.users.map((u) => `<button class="arow" data-act="user" data-id="${esc(u.uid)}"><span class="avatar">${esc((u.name || '?').charAt(0))}</span>
+      <div class="at"><b>${esc(u.name || 'بدون اسم')}</b><small class="ltr-r">${esc(u.email)}</small>${u.phone ? `<small class="num">${esc(u.phone)}</small>` : ''}</div>
+      <div class="side"><b class="pr">${money(u.balance)}</b>${u.blocked ? '<span class="badge badge-bad">موقوف</span>' : '<span class="badge badge-ok">نشط</span>'}<small class="muted num">${fmtDate(u.createdAt)}</small></div></button>`).join('')
       : `<div class="empty"><div class="ico-wrap">${icon('users', 'ico-lg')}</div><b>لا توجد نتائج</b></div>`;
   };
   $('#q').oninput = (e) => { clearTimeout(timer); timer = setTimeout(() => load(e.target.value.trim()).catch((x) => toast(x.message, 'bad')), 350); };
@@ -438,11 +476,11 @@ async function userSheet(uid, onChange) {
     const d = await api('/api/admin/users/' + encodeURIComponent(uid));
     const u = d.user;
     $('#us', sh).innerHTML = `<div style="display:flex;gap:14px;align-items:center"><span class="avatar lg" style="width:64px;height:64px">${esc((u.name || '?').charAt(0))}</span>
-      <div style="min-width:0"><h3 style="margin:0">${esc(u.name)} ${u.blocked ? '<span class="badge badge-bad">موقوف</span>' : ''}</h3><small class="muted" style="direction:ltr;display:block;text-align:right">${esc(u.email)}</small><small class="muted num">${esc(u.phone || '—')}</small></div></div>
+      <div style="min-width:0"><h3 style="margin:0">${esc(u.name)} ${u.blocked ? '<span class="badge badge-bad">موقوف</span>' : ''}</h3><small class="muted" style="direction:ltr;display:block;text-align:right">${esc(u.email)}</small><small class="muted num">${esc(u.phone || 'بدون رقم')}</small></div></div>
       <div class="kpis" style="grid-template-columns:1fr 1fr;margin-top:14px"><div class="kpi hl"><small>الرصيد</small><b>${money(u.balance)}</b></div><div class="kpi"><small>إجمالي المشتريات</small><b>${money(d.spent)}</b></div></div>
       <div class="panel" style="margin-top:14px;padding:14px"><h3 style="margin-bottom:10px">تعديل الرصيد</h3><div class="form-grid cols">
-        <div class="field"><label>المبلغ (+ للإضافة / - للخصم)</label><input class="input ltr" id="bd" type="number" step="0.01" placeholder="مثال: 10 أو -5"></div>
-        <div class="field"><label>السبب</label><input class="input" id="bn" maxlength="200" placeholder="تعويض / تصحيح"></div></div>
+        <div class="field"><label>المبلغ (موجب للإضافة وسالب للخصم)</label><input class="input ltr" id="bd" type="number" step="0.01" placeholder="مثال: 10 أو -5"></div>
+        <div class="field"><label>السبب</label><input class="input" id="bn" maxlength="200" placeholder="تعويض أو تصحيح"></div></div>
         <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="bal">${icon('check', 'ico-sm')} تطبيق</button></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px"><button class="btn ${u.blocked ? 'btn-ok' : 'btn-danger'}" data-act="blk">${u.blocked ? 'إلغاء الإيقاف' : 'إيقاف الحساب'}</button><button class="btn btn-soft" data-act="msg">${icon('bell', 'ico-sm')} إرسال إشعار</button></div>
       <h3 style="margin-top:18px;font-size:15px">آخر الطلبات</h3><div class="tbl-mini">${d.orders.slice(0, 10).map((o) => `<div><span>${esc(o.title)} <small class="muted">${timeAgo(o.createdAt)}</small></span><span>${fmt(o.total)} ${ST[o.status] || ''}</span></div>`).join('') || '<span class="muted">لا توجد</span>'}</div>
@@ -476,7 +514,7 @@ async function notify() {
     <div class="form-grid"><div class="field"><label>العنوان</label><input class="input" id="nt" maxlength="80" placeholder="عرض خاص"></div>
     <div class="field"><label>النص</label><textarea class="textarea" id="nb" maxlength="400" placeholder="خصم 20% على بطاقات Xbox لفترة محدودة"></textarea></div>
     <button class="btn btn-primary" data-act="send">${icon('send', 'ico-sm')} إرسال للجميع</button>
-    <span class="hint">يظهر في صفحة الإشعارات لكل العملاء ويصل كإشعار جوال لمن فعّل الإشعارات.</span></div></div>`;
+    <span class="hint">يظهر في صفحة الإشعارات لكل العملاء ويوصل كإشعار جوال للي مفعّلين الإشعارات</span></div></div>`;
   A.actions.send = (b) => busy(b, async () => {
     const title = $('#nt').value.trim(), body = $('#nb').value.trim();
     if (title.length < 2 || body.length < 2) return toast('أكمل العنوان والنص', 'bad');
@@ -511,26 +549,26 @@ async function settings() {
   const chRow = (c, i) => `<div class="repeat-row" data-ch="${i}"><div class="rr">${sel(chOpts, c.type || 'website', 'data-c="type"')}<input class="input" data-c="label" maxlength="30" placeholder="الاسم (اختياري)" value="${esc(c.label || '')}"></div>
     <div style="display:flex;gap:8px"><input class="input ltr" data-c="url" maxlength="300" placeholder="https://..." value="${esc(c.url || '')}"><button class="btn btn-danger btn-xs" style="height:48px" data-act="rmCh" data-i="${i}">${icon('trash', 'ico-sm')}</button></div></div>`;
   $('#main').innerHTML = top('الإعدادات', `<button class="btn btn-primary btn-sm" data-act="save">${icon('check', 'ico-sm')} حفظ</button>`) + `<div class="panels" id="sf">
-    <div class="panel"><h3>البانرات الإعلانية <small>حتى 8 · يتبدلوا تلقائياً ويتسحبوا باليد</small></h3><div class="form-grid" id="banners"></div>
-      <button class="btn btn-ghost btn-sm" data-act="addBanner" style="margin-top:12px">${icon('plus', 'ico-sm')} إضافة بانر</button></div>
-    <div class="panel"><h3>الدعم والتواصل</h3>
+    <details class="panel acc" open><summary>${icon('image')}<span><b>البانرات الإعلانية</b><small>حتى 8 بانرات تتبدل كل 5 ثواني</small></span>${icon('down', 'chev')}</summary><div class="acc-b"><div class="form-grid" id="banners"></div>
+      <button class="btn btn-ghost btn-sm" data-act="addBanner" style="margin-top:12px">${icon('plus', 'ico-sm')} إضافة بانر</button></div></details>
+    <details class="panel acc"><summary>${icon('support')}<span><b>الدعم والتواصل</b><small>أرقام الدعم والقنوات</small></span>${icon('down', 'chev')}</summary><div class="acc-b">
       <div class="label" style="margin-bottom:8px">أرقام الدعم</div><div class="form-grid" id="phones"></div>
       <button class="btn btn-ghost btn-sm" data-act="addPhone" style="margin-top:10px">${icon('plus', 'ico-sm')} إضافة رقم</button>
       <div class="label" style="margin:18px 0 8px">القنوات والحسابات</div><div class="form-grid" id="channels"></div>
-      <button class="btn btn-ghost btn-sm" data-act="addCh" style="margin-top:10px">${icon('plus', 'ico-sm')} إضافة قناة</button></div>
-    <div class="panel"><h3>طرق الدفع</h3><div class="form-grid cols">
+      <button class="btn btn-ghost btn-sm" data-act="addCh" style="margin-top:10px">${icon('plus', 'ico-sm')} إضافة قناة</button></div></details>
+    <details class="panel acc" id="pmPanel"><summary>${icon('wallet')}<span><b>طرق الدفع والإيداع</b><small>الشعارات والأرقام وحدود الإيداع</small></span>${icon('down', 'chev')}</summary><div class="acc-b"><div class="form-grid cols">
       <div class="field"><label>سعر الدولار (د.ل)</label><input class="input ltr" type="number" step="0.01" data-in="usdRate" value="${s.usdRate}"></div>
       <div class="field"><label>أقل إيداع / أعلى إيداع</label><div class="rr" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><input class="input ltr" type="number" step="0.5" data-in="depositMin" value="${s.depositMin}"><input class="input ltr" type="number" step="1" data-in="depositMax" value="${s.depositMax}"></div></div></div>
       <div class="form-grid cols" style="margin-top:14px">${Object.entries(s.payments).map(([k, p]) => `<div class="pm-card"><label class="toggle-row" style="padding:0;border:0;background:none"><b>${pmNames[k] || k}</b><span class="switch"><input type="checkbox" data-in="p_${k}_enabled" ${p.enabled ? 'checked' : ''}></span></label>
         ${uploader(`p_${k}_image`, p.image || '')}
         <input class="input" data-in="p_${k}_label" maxlength="40" value="${esc(p.label)}" placeholder="الاسم الظاهر">
         <input class="input ltr" data-in="p_${k}_number" maxlength="60" value="${esc(p.number)}" placeholder="${k === 'cards' ? 'غير مطلوب' : 'الرقم / الحساب'}">
-        <input class="input" data-in="p_${k}_note" maxlength="200" value="${esc(p.note)}" placeholder="ملاحظة للعميل"></div>`).join('')}</div></div>
-    <div class="panel"><h3>الواجهة والصيانة</h3><div class="form-grid">
+        <input class="input" data-in="p_${k}_note" maxlength="200" value="${esc(p.note)}" placeholder="ملاحظة للعميل"></div>`).join('')}</div></div></details>
+    <details class="panel acc"><summary>${icon('settings')}<span><b>الواجهة والصيانة</b><small>شريط الإعلان ووضع الصيانة</small></span>${icon('down', 'chev')}</summary><div class="acc-b"><div class="form-grid">
       <div class="field"><label>شريط إعلان (اختياري)</label><input class="input" data-in="announcement" maxlength="200" value="${esc(s.announcement)}" placeholder="مثال: الطلبات تتنفذ من 9 الصبح لين 2 الليل"></div>
       <label class="toggle-row"><span><b>وضع الصيانة</b><small>المتجر يعرض صفحة الصيانة ويوقف الطلبات والإيداعات</small></span><span class="switch"><input type="checkbox" data-in="maintenance" ${s.maintenance ? 'checked' : ''}></span></label>
       <div class="field"><label>رسالة الصيانة</label><input class="input" data-in="maintenanceMsg" maxlength="300" value="${esc(s.maintenanceMsg)}"></div>
-      <div class="field"><label>وقت العودة المتوقع (توقيت ليبيا · اختياري)</label><input class="input ltr" type="datetime-local" data-in="maintenanceUntil" value="${untilLocal}"></div></div></div></div>
+      <div class="field"><label>وقت العودة المتوقع (توقيت ليبيا واختياري)</label><input class="input ltr" type="datetime-local" data-in="maintenanceUntil" value="${untilLocal}"></div></div></div></details></div>
     <button class="btn btn-primary btn-block" style="margin-top:16px" data-act="save">${icon('check')} حفظ الإعدادات</button>`;
   const collectBanners = () => $$('[data-banner]').map((el) => {
     const v = (k) => $(`[data-b="${k}"]`, el).value.trim();
@@ -539,14 +577,14 @@ async function settings() {
   const collectPhones = () => $$('[data-phone]').map((el) => ({ label: $('[data-p="label"]', el).value.trim(), number: $('[data-p="number"]', el).value.trim(), whatsapp: $('[data-p="whatsapp"]', el).checked, call: $('[data-p="call"]', el).checked }));
   const collectCh = () => $$('[data-ch]').map((el) => ({ type: $('[data-c="type"]', el).value, label: $('[data-c="label"]', el).value.trim(), url: $('[data-c="url"]', el).value.trim() }));
   const drawB = () => {
-    $('#banners').innerHTML = banners.map(bannerRow).join('') || '<span class="muted">ما فيش بانرات · يظهر بانر نصي افتراضي</span>';
+    $('#banners').innerHTML = banners.map(bannerRow).join('') || '<span class="muted">ما فيش بانرات ويظهر بانر افتراضي بالشعار</span>';
     bindUploaders($('#banners'));
     $$('[data-b="ctaType"]').forEach((sl) => sl.addEventListener('change', () => { $('[data-b="ctaValue"]', sl.closest('[data-banner]')).placeholder = ctaPh[sl.value] || ''; }));
   };
   const drawP = () => { $('#phones').innerHTML = phones.map(phoneRow).join('') || '<span class="muted">ما فيش أرقام</span>'; };
   const drawC = () => { $('#channels').innerHTML = channels.map(chRow).join('') || '<span class="muted">ما فيش قنوات</span>'; };
   drawB(); drawP(); drawC();
-  bindUploaders($('#sf').querySelector('.panel:nth-child(3)'));
+  bindUploaders($('#pmPanel'));
   A.actions.addBanner = () => { banners = collectBanners(); if (banners.length >= 8) return toast('الحد 8 بانرات', 'bad'); banners.push({ ctaType: 'none' }); drawB(); };
   A.actions.rmBanner = (b) => { banners = collectBanners(); banners.splice(Number(b.dataset.i), 1); drawB(); };
   A.actions.addPhone = () => { phones = collectPhones(); if (phones.length >= 6) return toast('الحد 6 أرقام', 'bad'); phones.push({ whatsapp: true, call: true }); drawP(); };
@@ -568,9 +606,14 @@ async function settings() {
 }
 
 /* ---------- Boot ---------- */
+function hideSplash() {
+  const sp = $('#splash'); if (!sp) return;
+  const wait = Math.max(0, 350 - (Date.now() - (window.__glSplashStart || 0)));
+  setTimeout(() => { sp.classList.add('out'); setTimeout(() => sp.remove(), 500); }, wait);
+}
 onAuthStateChanged(auth, async (u) => {
   clearInterval(A.badgeTimer);
-  if (!u) { A.user = null; loginScreen(); return; }
+  if (!u) { A.user = null; loginScreen(); hideSplash(); return; }
   try {
     const me = await api('/api/admin/me');
     A.user = { uid: me.uid, email: me.email || u.email };
@@ -580,4 +623,5 @@ onAuthStateChanged(auth, async (u) => {
     await logout();
     loginScreen(e.status === 403 ? 'هذا الحساب لا يملك صلاحية الإدارة' : e.message);
   }
+  hideSplash();
 });

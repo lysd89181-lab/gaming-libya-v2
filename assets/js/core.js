@@ -4,8 +4,8 @@ import {
   setPersistence, browserLocalPersistence, browserSessionPersistence,
   reauthenticateWithCredential, EmailAuthProvider, updatePassword,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { CONFIG } from './config.js?v=202610201844';
-import { icon } from './icons.js?v=202610201844';
+import { CONFIG } from './config.js?v=202610201941';
+import { icon } from './icons.js?v=202610201941';
 
 export { CONFIG };
 export const app = initializeApp(CONFIG.firebase);
@@ -63,7 +63,7 @@ export function timeAgo(iso) {
 }
 export function fmtDate(iso, withTime = false) {
   const t = Date.parse(iso || '');
-  if (!t) return '—';
+  if (!t) return '';
   const d = new Date(t);
   const opt = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Africa/Tripoli' };
   if (withTime) Object.assign(opt, { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -252,7 +252,7 @@ export async function enablePush(vapidKey, { admin = false } = {}) {
   if (!token) throw new Error('تعذر تفعيل الإشعارات');
   await api('/api/push', { method: 'POST', body: { token, admin } });
   store.set(admin ? 'gl_push_admin' : 'gl_push', true);
-  m.onMessage(m.getMessaging(app), (p) => toast(`${p.notification?.title || ''} · ${p.notification?.body || ''}`, 'ok', 5000));
+  m.onMessage(m.getMessaging(app), (p) => toast(`${p.notification?.title || ''} ${p.notification?.body || ''}`, 'ok', 5000));
   return true;
 }
 

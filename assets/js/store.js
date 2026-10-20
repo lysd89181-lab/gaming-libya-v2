@@ -2,8 +2,8 @@ import {
   CONFIG, auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, uuid, captcha, loginWith, signupWith, resetPassword, changePassword, logout,
   onAuthStateChanged, enablePush,
-} from './core.js?v=202610201844';
-import { icon, logoMark, brand } from './icons.js?v=202610201844';
+} from './core.js?v=202610201941';
+import { icon, logoMark, brand } from './icons.js?v=202610201941';
 
 /* ================= State ================= */
 const S = {
@@ -29,9 +29,11 @@ async function loadCatalog(force = false) {
   if (!S.cat || force) S.cat = await api('/api/catalog');
   return S.cat;
 }
-async function loadMe() {
+// بيانات الحساب تتجدد كل 20 ثانية كحد أقصى (توفير قراءات)
+async function loadMe(force = false) {
   if (!S.user) { S.me = null; updateChrome(); return null; }
-  try { S.me = await api('/api/me'); }
+  if (!force && S.me && Date.now() - (S.meAt || 0) < 20000) { updateChrome(); return S.me; }
+  try { S.me = await api('/api/me'); S.meAt = Date.now(); }
   catch (e) {
     S.me = null;
     if (e.status === 403 || e.status === 401) { toast(e.message, 'bad', 5000); await logout(); }
@@ -47,52 +49,32 @@ function linePrice(s, qty) {
 }
 const cartCount = () => S.cart.length;
 
-/* ================= Chrome (top bar / tab bar / drawer) ================= */
+/* ================= Chrome (top bar / tab bar) ================= */
 function setTop(mode, title = '', action = '') {
   if (mode === 'home') {
-    topbar.innerHTML = `<div class="tb-actions">
-        <button class="btn-icon" data-act="drawer" aria-label="القائمة">${S.me ? `<span class="avatar" style="width:100%;height:100%;box-shadow:none;border-radius:13px">${esc((S.me.name || 'G').trim().charAt(0))}</span>` : icon('menu')}</button>
+    const n = cartCount();
+    topbar.innerHTML = `<a href="#/home" class="tb-brand" aria-label="الرئيسية">${brand()}</a>
+      <div class="tb-actions">
         <a class="btn-icon" href="#/notifications" aria-label="الإشعارات">${icon('bell')}${S.me?.unread ? '<i class="dot"></i>' : ''}</a>
-        <button class="btn-icon theme-toggle" data-act="theme" aria-label="الوضع الليلي/النهاري">${icon(isLight() ? 'moon' : 'sun')}</button>
-      </div><a href="#/home" aria-label="الرئيسية">${brand()}</a>`;
+        <a class="btn-icon" id="tbCart" href="#/cart" aria-label="السلة">${icon('cart')}<i class="count ${n ? '' : 'hidden'}">${n}</i></a>
+      </div>`;
   } else {
     topbar.innerHTML = `<button class="btn-icon" data-act="back" aria-label="رجوع">${icon('back')}</button>
-      <div class="tb-title">${esc(title)}</div><div class="tb-actions">${action || '<span style="width:42px"></span>'}</div>`;
+      <div class="tb-title">${esc(title)}</div><div class="tb-actions">${action || '<span class="tb-gap"></span>'}</div>`;
   }
 }
+const TABS = [['home', 'home', 'الرئيسية'], ['categories', 'grid', 'الأقسام'], ['orders', 'receipt', 'طلباتي'], ['wallet', 'wallet', 'المحفظة'], ['account', 'user', 'حسابي']];
+const TAB_OF = { home: 'home', categories: 'categories', category: 'categories', search: 'categories', offers: 'categories', cart: 'categories', favorites: 'account', wallet: 'wallet', deposit: 'wallet', deposits: 'wallet', orders: 'orders', order: 'orders', account: 'account', profile: 'account', password: 'account', support: 'account', notifications: 'account' };
 function updateChrome() {
   const h = parseHash().path.split('/')[0] || 'home';
-  const map = { home: 'home', categories: 'categories', category: 'categories', search: 'categories', offers: 'categories', wallet: 'wallet', deposit: 'wallet', deposits: 'wallet', orders: 'orders', order: 'orders', account: 'account', profile: 'account', password: 'account', support: 'account', notifications: 'account', favorites: 'account', cart: 'categories' };
-  const cur = map[h] || '';
-  const tabs = [['home', 'home', 'الرئيسية'], ['categories', 'gamepad', 'الألعاب'], ['wallet', 'wallet', 'المحفظة'], ['orders', 'receipt', 'طلباتي'], ['account', 'user', 'حسابي']];
-  const idx = tabs.findIndex(([k]) => k === cur);
-  tabbar.innerHTML = `<span class="tab-ind" style="${idx < 0 ? 'opacity:0' : `right:calc(${idx * 20}% + 6px)`}"></span>` + tabs.map(([k, ic, label]) => `<a class="tab ${cur === k ? 'active' : ''}" href="#/${k}">${icon(ic)}<span>${label}</span></a>`).join('');
+  const cur = TAB_OF[h] || '';
+  const idx = TABS.findIndex(([k]) => k === cur);
+  tabbar.innerHTML = `<span class="tab-ind" style="${idx < 0 ? 'opacity:0' : `right:calc(${idx * 20}% + 6px)`}"></span>` + TABS.map(([k, ic, label]) => `<a class="tab ${cur === k ? 'active' : ''}" href="#/${k}">${icon(ic)}<span>${label}</span></a>`).join('');
   const bell = topbar.querySelector('a[href="#/notifications"]');
   if (bell) { bell.querySelector('.dot')?.remove(); if (S.me?.unread) bell.insertAdjacentHTML('beforeend', '<i class="dot"></i>'); }
-  const cc = $('#bandCart .count');
+  const cc = $('#tbCart .count');
   if (cc) { const n = cartCount(); cc.textContent = n; cc.classList.toggle('hidden', !n); }
 }
-function openDrawer() {
-  closeDrawer();
-  const me = S.me;
-  const ov = document.createElement('div'); ov.id = 'drawer-ov';
-  const d = document.createElement('aside'); d.id = 'drawer'; d.setAttribute('role', 'dialog');
-  const links = [
-    ['#/home', 'home', 'الرئيسية'], ['#/categories', 'grid', 'الأقسام'], ['#/offers', 'tag', 'العروض'], ['#/cart', 'cart', 'السلة'],
-    ['#/wallet', 'wallet', 'المحفظة'], ['#/orders', 'receipt', 'طلباتي'], ['#/notifications', 'bell', 'الإشعارات'],
-    ['#/favorites', 'heart', 'المفضلة'], ['#/account', 'user', 'حسابي'], ['#/support', 'support', 'الدعم والتواصل'],
-  ];
-  d.innerHTML = `<div class="drawer-head">${brand()}<button class="btn-icon" data-act="closeDrawer" aria-label="إغلاق">${icon('x')}</button></div>
-    ${me ? `<a class="drawer-user" href="#/account"><span class="avatar">${esc(me.name.trim().charAt(0) || 'G')}</span><div style="min-width:0"><b>${esc(me.name)}</b><span>${esc(me.email)}</span></div></a>`
-      : `<a class="btn btn-primary btn-block" href="#/login">${icon('user')} تسجيل الدخول</a>`}
-    <nav class="menu">${links.map(([h, ic, t]) => `<a href="${h}">${icon(ic)}<span>${t}</span>${icon('forward', 'chev')}</a>`).join('')}
-    <button data-act="theme">${icon(isLight() ? 'moon' : 'sun')}<span>${isLight() ? 'الوضع الليلي' : 'الوضع النهاري'}</span></button>
-    ${me ? `<button class="danger" data-act="logout">${icon('logout')}<span>تسجيل الخروج</span></button>` : ''}</nav>`;
-  ov.addEventListener('click', closeDrawer);
-  document.body.append(ov, d);
-  d.addEventListener('click', (e) => { if (e.target.closest('a')) closeDrawer(); });
-}
-function closeDrawer() { $('#drawer')?.remove(); $('#drawer-ov')?.remove(); }
 
 /* ================= Global events ================= */
 document.addEventListener('click', async (e) => {
@@ -111,11 +93,8 @@ document.addEventListener('click', async (e) => {
   if (!a) return;
   const name = a.dataset.act;
   if (name === 'back') { if (S.navCount > 1) history.back(); else go('#/home'); return; }
-  if (name === 'theme') { toggleTheme(); if ($('#drawer')) openDrawer(); return; }
-  if (name === 'drawer') return openDrawer();
-  if (name === 'closeDrawer') return closeDrawer();
+  if (name === 'theme') { toggleTheme(); return; }
   if (name === 'logout') {
-    closeDrawer();
     const ok = await confirmSheet({ title: 'تسجيل الخروج', text: 'هل تريد تسجيل الخروج من حسابك؟', ok: 'خروج', danger: true });
     if (ok) { await logout(); toast('تم تسجيل الخروج', 'ok'); go('#/home'); }
     return;
@@ -167,7 +146,7 @@ function supportBlock() {
   const items = [];
   for (const p of phones) {
     if (p.whatsapp) items.push(`<a class="sup-item" href="${esc(waLink(p.number))}" target="_blank" rel="noopener"><span class="si">${icon('whatsapp')}</span><span style="min-width:0"><b>${esc(p.label || 'واتساب')}</b><small class="num">${esc(p.number)}</small></span></a>`);
-    if (p.call) items.push(`<a class="sup-item" href="tel:${esc(p.number.replace(/[^\d+]/g, ''))}"><span class="si">${icon('call')}</span><span style="min-width:0"><b>${esc(p.label ? 'اتصال · ' + p.label : 'اتصال')}</b><small class="num">${esc(p.number)}</small></span></a>`);
+    if (p.call) items.push(`<a class="sup-item" href="tel:${esc(p.number.replace(/[^\d+]/g, ''))}"><span class="si">${icon('call')}</span><span style="min-width:0"><b>${esc(p.label ? 'اتصال ' + p.label : 'اتصال')}</b><small class="num">${esc(p.number)}</small></span></a>`);
   }
   for (const c of channels) {
     const [ic, name] = CH[c.type] || CH.website;
@@ -177,31 +156,23 @@ function supportBlock() {
 }
 
 /* ================= Shared UI ================= */
-function priceHtml(s) {
-  if (s.enableQuantity) return `<b><span class="cur">حسب الكمية</span></b>`;
-  return `<b><span class="num">${fmt(s.finalPrice)}</span> <span class="cur">د.ل</span></b>${s.discount > 0 ? `<s class="num">${fmt(s.price)}</s>` : ''}`;
-}
 const svcLink = (s) => `#/category/${encodeURIComponent(s.category)}?p=${encodeURIComponent(s.id)}`;
 function catCard2(c) {
   const n = (S.cat?.services || []).filter((x) => x.category === c.id).length;
   const vis = imgUrl(c.image) ? imgTag(c.image, c.name) : icon(c.icon || 'gamepad');
   return `<a class="cc" href="#/category/${encodeURIComponent(c.id)}"><span class="cm">${vis}</span><span class="cl"><b>${esc(c.name.trim())}</b><small><span class="num">${n}</span> ${n === 1 ? 'منتج' : n === 2 ? 'منتجين' : n <= 10 ? 'منتجات' : 'منتج'}</small></span></a>`;
 }
-function gmTile(c) {
-  const vis = c.icon ? icon(c.icon) : imgTag(c.image, c.name);
-  return `<a class="gm" href="#/category/${encodeURIComponent(c.id)}"><span class="ic">${vis}</span><span>${esc(c.name.trim())}</span></a>`;
-}
+const priceTxt = (s) => (s.auto && s.stock === 0 ? 'نفذت الكمية' : s.enableQuantity ? 'حسب الكمية' : `${fmt(s.finalPrice)} د.ل`);
 function cvTile(s) {
   const out = s.auto && s.stock === 0;
-  return `<a class="cv" href="${svcLink(s)}"><span class="im">${imgTag(s.image, s.title)}${s.discount > 0 ? `<i class="off">-${s.discount}%</i>` : ''}${s.auto && !out ? `<i class="fast">${icon('bolt')}</i>` : ''}</span><b>${esc(s.title)}</b><small>${out ? 'نفذت الكمية' : s.enableQuantity ? 'حسب الكمية' : `${fmt(s.finalPrice)} د.ل`}</small></a>`;
+  return `<a class="cv" href="${svcLink(s)}"><span class="im">${imgTag(s.image, s.title)}${s.discount > 0 ? `<i class="off">-${s.discount}%</i>` : ''}${s.auto && !out ? `<i class="fast">${icon('bolt')}</i>` : ''}</span><b>${esc(s.title)}</b><small class="${out ? 'out' : ''}">${priceTxt(s)}</small></a>`;
 }
-function pCard(s) {
+// صف منتج موحّد: الأكثر مبيعاً والعروض والبحث والمفضلة
+function pRow(s) {
   const out = s.auto && s.stock === 0;
-  const tag = s.auto ? `<span class="p-tag ${out ? 'out' : ''}">${out ? 'نفذت الكمية' : `${icon('bolt')} تسليم فوري`}</span>` : s.badge ? `<span class="p-tag out">${esc(s.badge)}</span>` : '';
-  return `<a class="p-card ${out ? 'out' : ''}" href="${svcLink(s)}">
-    <div class="p-media">${imgTag(s.image, s.title)}${s.discount > 0 ? `<span class="p-off"><span class="num">${s.discount}%</span>&nbsp;خصم</span>` : ''}${tag}
-    <button class="p-fav ${S.favs.has(s.id) ? 'on' : ''}" data-fav="${esc(s.id)}" aria-label="المفضلة">${icon('heart')}</button></div>
-    <div class="p-body"><div class="p-title">${esc(s.title)}</div><div class="p-price">${priceHtml(s)}</div></div><span class="p-buy">${out ? 'غير متوفر' : 'اشترِ الآن'}</span></a>`;
+  const cat = catById(s.category)?.name || '';
+  return `<a class="prow ${out ? 'out' : ''}" href="${svcLink(s)}"><span class="pr-im">${imgTag(s.image, s.title)}${s.discount > 0 ? `<i class="off">-${s.discount}%</i>` : ''}</span>
+    <span class="pr-tx"><b>${esc(s.title)}</b><small>${esc(cat)}${s.auto && !out ? ` <em>${icon('bolt', 'ico-sm')} فوري</em>` : ''}</small><span class="pr-p">${priceTxt(s)}${s.discount > 0 && !s.enableQuantity ? ` <s>${fmt(s.price)}</s>` : ''}</span></span>${icon('forward', 'chev')}</a>`;
 }
 function emptyState(ic, title, text = '', btn = '') {
   return `<div class="empty"><div class="ico-wrap">${icon(ic)}</div>${title ? `<b>${esc(title)}</b>` : ''}${text ? `<span>${esc(text)}</span>` : ''}${btn}</div>`;
@@ -210,7 +181,8 @@ function errorState(msg) {
   S.actions.retry = () => render();
   return emptyState('alert', 'تعذّر التحميل', msg, `<button class="btn btn-ghost btn-sm" data-act="retry">${icon('refresh')} إعادة المحاولة</button>`);
 }
-const skGrid = (n = 4) => `<div class="p-grid" style="margin-top:16px">${Array.from({ length: n }, () => '<div class="sk" style="aspect-ratio:.78"></div>').join('')}</div>`;
+const skRows = (n = 4) => `<div class="rows">${'<div class="sk-row"><span class="sk"></span><span><i class="sk"></i><i class="sk"></i></span></div>'.repeat(n)}</div>`;
+const skCats = (n = 4) => `<div class="cat2">${'<div class="sk" style="aspect-ratio:.82"></div>'.repeat(n)}</div>`;
 const statusBadge = (st) => ({
   completed: '<span class="badge badge-ok">مكتمل</span>',
   approved: '<span class="badge badge-ok">تمت الإضافة</span>',
@@ -219,14 +191,15 @@ const statusBadge = (st) => ({
 }[st] || `<span class="badge badge-info">${esc(st)}</span>`);
 function footer() {
   const st = S.cfg?.settings || {};
-  const pays = Object.entries(st.payments || {}).filter(([, p]) => p.enabled && imgUrl(p.image)).map(([k]) => pmIco(k)).join('');
-  const names = Object.values(st.payments || {}).filter((p) => p.enabled).map((p) => esc(p.label)).join(' • ');
+  const pms = Object.entries(st.payments || {}).filter(([, p]) => p.enabled);
+  const withImg = pms.filter(([, p]) => imgUrl(p.image));
   const { channels } = supportData();
   return `<footer class="lfoot">${brand()}
-    ${pays ? `<div class="pays">${pays}</div>` : names ? `<small>${names}</small>` : ''}
+    ${withImg.length ? `<div class="pays">${withImg.map(([k]) => pmIco(k)).join('')}</div>` : pms.length ? `<div class="pay-names">${pms.map(([, p]) => `<span>${esc(p.label)}</span>`).join('')}</div>` : ''}
     ${channels.length ? `<div class="socials">${channels.map((c) => `<a href="${esc(c.url)}" target="_blank" rel="noopener" aria-label="${esc((CH[c.type] || CH.website)[1])}">${icon((CH[c.type] || CH.website)[0])}</a>`).join('')}</div>` : ''}
-    <a href="#/support">${icon('support', 'ico-sm')} الدعم والتواصل</a>
-    <small>© ${new Date().getFullYear()} جيمنق ليبيا · تطوير <a href="https://wa.me/${CONFIG.DEV_CREDIT.whatsapp}" target="_blank" rel="noopener">${esc(CONFIG.DEV_CREDIT.name)}</a></small></footer>`;
+    <a class="lf-sup" href="#/support">${icon('support', 'ico-sm')} الدعم والتواصل</a>
+    <small>© ${new Date().getFullYear()} جيمنق ليبيا</small>
+    <small class="lf-dev">تطوير <a href="https://wa.me/${CONFIG.DEV_CREDIT.whatsapp}" target="_blank" rel="noopener">${esc(CONFIG.DEV_CREDIT.name)}</a></small></footer>`;
 }
 function needLogin(next) {
   setTop('inner', 'تسجيل الدخول مطلوب');
@@ -254,7 +227,7 @@ async function loginPage(q) {
   if (S.user) return go(q.get('next') ? '#/' + q.get('next') : '#/home');
   view.innerHTML = `<section class="auth">
     <div class="auth-logo">${brand()}</div>
-    <h1>تسجيل الدخول</h1><p class="sub">أهلاً بيك من جديد</p>
+    <h1>مرحباً بعودتك</h1><p class="sub">سجّل دخولك وكمّل شحن ألعابك</p>
     <form id="f" novalidate>
       <div class="input-wrap">${icon('user')}<input class="input has-ico" name="ident" autocomplete="username" placeholder="البريد الإلكتروني أو رقم الهاتف" required maxlength="100"></div>
       <div class="input-wrap">${icon('lock')}<input class="input has-ico" name="pw" type="password" autocomplete="current-password" placeholder="كلمة المرور" required maxlength="64"><button type="button" class="input-act" data-act="pw" aria-label="إظهار">${icon('eye')}</button></div>
@@ -291,7 +264,7 @@ async function signupPage(q) {
   document.body.classList.add('bare');
   if (S.user) return go('#/home');
   view.innerHTML = `<section class="auth"><button class="btn-icon back" data-act="back" aria-label="رجوع">${icon('back')}</button>
-    <h1>إنشاء حساب جديد</h1><p class="sub">سجّل بياناتك وابدأ الشحن</p>
+    <div class="auth-logo">${brand()}</div><h1>إنشاء حساب جديد</h1><p class="sub">سجّل بياناتك وابدأ الشحن</p>
     <form id="f" novalidate>
       <div class="input-wrap">${icon('user')}<input class="input has-ico" name="fullname" autocomplete="name" placeholder="الاسم الكامل" maxlength="40" required></div>
       <div class="input-wrap">${icon('phone')}<input class="input has-ico ltr" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="09XXXXXXXX" maxlength="20" required></div>
@@ -352,53 +325,42 @@ function forgotPage() {
 
 // 4. الرئيسية
 async function home() {
-  document.body.classList.add('home');
-  view.innerHTML = `<div class="band" style="height:230px"></div><div class="sk" style="height:90px;margin-top:16px"></div>${skGrid(3)}`;
+  setTop('home');
+  view.innerHTML = `<div class="sk" style="height:52px;margin-top:8px"></div><div class="sk" style="height:48px;margin-top:12px"></div><div class="sk" style="aspect-ratio:16/8.4;margin-top:16px;border-radius:20px"></div><div class="sec">${skCats(4)}</div>`;
   let cfg, cat;
   try { [cfg, cat] = await Promise.all([loadConfig(), loadCatalog()]); } catch (e) { view.innerHTML = errorState(e.message); return; }
   const s = cfg.settings;
   const svcs = cat.services.filter((x) => !(x.auto && x.stock === 0));
   const ranked = [...svcs].sort((a, b) => b.sold - a.sold || a.order - b.order);
   const withImg = ranked.filter((x) => imgUrl(x.image));
-  const featured = withImg[0] || ranked[0];
-  const grid = (withImg.length >= 4 ? withImg : ranked).filter((x) => x !== featured).slice(0, 6);
+  const grid = (withImg.length >= 3 ? withImg : ranked).slice(0, 6);
   const offers = svcs.filter((x) => x.discount > 0).slice(0, 4);
   const banners = (s.banners || []).filter((b) => imgUrl(b.image));
   const slide = (b) => {
     const href = ctaHref(b.ctaType, b.ctaValue);
     const ext = href && !href.startsWith('#');
-    const cta = href ? `<a class="b-cta" href="${esc(href)}" ${ext ? 'target="_blank" rel="noopener"' : ''}>${icon(CTA_ICON[b.ctaType] || 'external')} ${esc(b.ctaLabel || 'زيارة')}</a>` : '';
+    const cta = href ? `<a class="b-cta" href="${esc(href)}" ${ext ? 'target="_blank" rel="noopener"' : ''}>${esc(b.ctaLabel || 'اشحن الآن')}</a>` : '';
     const text = b.title || b.subtitle;
-    return `<div class="b-slide ${text || cta ? 'has-text' : ''}">${imgTag(b.image, b.title)}${text || cta ? `<div class="b-body"><div>${b.title ? `<h3>${esc(b.title)}</h3>` : ''}${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ''}</div>${cta}</div>` : ''}</div>`;
+    return `<div class="b-slide ${text || cta ? 'has-text' : ''}">${imgTag(b.image, b.title)}${text || cta ? `<div class="b-body">${b.title ? `<h3>${esc(b.title)}</h3>` : ''}${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ''}${cta}</div>` : ''}</div>`;
   };
   const n = banners.length;
   const first = (S.me?.name || '').trim().split(/\s+/)[0];
-  const nCart = cartCount();
   const cats = cat.categories;
+  const hero = n
+    ? `<div class="banners"><div class="b-track" id="track">${banners.map(slide).join('')}</div>${n > 1 ? `<div class="b-dots">${banners.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>`
+    : `<div class="banners"><div class="b-slide b-def"><span class="b-mark">${logoMark('')}</span><div class="b-body"><h3>شحن فوري لألعابك</h3><p>شدات وجواهر وبطاقات بالدينار الليبي</p><a class="b-cta" href="#/categories">تصفح الأقسام</a></div></div></div>`;
   view.innerHTML = `
-    <header class="band">
-      <div class="bt"><a href="#/home">${brand()}</a>
-        <div class="pills">
-          <a class="pill-ic soft" href="#/notifications" aria-label="الإشعارات">${icon('bell')}${S.me?.unread ? '<i class="dot"></i>' : ''}</a>
-          <a class="pill-ic soft" id="bandCart" href="#/cart" aria-label="السلة">${icon('cart')}<i class="count ${nCart ? '' : 'hidden'}">${nCart}</i></a>
-          <button class="pill-ic soft theme-toggle" data-act="theme" aria-label="الوضع">${icon(isLight() ? 'moon' : 'sun')}</button>
-          ${S.me ? `<a class="bal soft" href="#/wallet"><span class="num">${fmt(S.me.balance)}</span> د.ل<i>${icon('plus')}</i></a>` : `<a class="bal soft" href="#/login">دخول<i>${icon('user')}</i></a>`}
-        </div></div>
-      <div class="greet"><h1>${first ? `أهلاً <em>${esc(first)}</em>` : 'أهلاً بيك'}</h1><p>اشحن لعبتك بكل أريحية</p></div>
-      <a class="searchbar" href="#/search">${icon('search')}<span>ابحث عن لعبة أو اشتراك</span></a></header>
+    <div class="hello"><div><h1>${first ? `أهلاً <em>${esc(first)}</em>` : 'أهلاً بيك'}</h1><p>اشحن لعبتك بكل أريحية</p></div>
+      ${S.me ? `<a class="bal" href="#/wallet"><span class="num">${fmt(S.me.balance)}</span> د.ل<i>${icon('plus')}</i></a>` : `<a class="bal" href="#/login">دخول<i>${icon('user')}</i></a>`}</div>
+    <a class="searchbar" href="#/search">${icon('search')}<span>ابحث عن لعبة أو بطاقة</span></a>
     ${s.announcement ? `<div class="announce">${icon('megaphone')}<span>${esc(s.announcement)}</span></div>` : ''}
-    ${n ? `<div class="banners"><div class="b-track" id="track">${banners.map(slide).join('')}</div>${n > 1 ? `<div class="b-dots">${banners.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>` : ''}
-    <section class="sec"><div class="sec-head"><h2>الألعاب والأقسام</h2><a href="#/categories">عرض الكل</a></div>
-      <div class="cat2 reveal">${cats.slice(0, 6).map(catCard2).join('')}</div>
-      ${cats.length > 6 ? `<a class="btn btn-ghost btn-block" style="margin-top:16px" href="#/categories">كل الأقسام <span class="num">(${cats.length})</span></a>` : ''}</section>
-    ${featured ? `<section class="sec"><div class="sec-head"><h2>الأكثر طلباً هذا الأسبوع</h2></div>
-      <a class="feat" href="${svcLink(featured)}"><span class="fi">${imgTag(featured.image, featured.title)}</span><div><div><b>${esc(featured.title)}</b><small>${esc(catById(featured.category)?.name || '')}</small></div>
-      <div class="pr"><span>${featured.enableQuantity ? '<em>حسب الكمية</em>' : `${fmt(featured.finalPrice)} <em>د.ل</em>`}</span><span class="go soft">اشحن</span></div></div></a></section>` : ''}
-    ${grid.length ? `<section class="sec"><div class="sec-head"><h2>الأكثر مبيعاً</h2><a href="#/offers?all=1">الكل ${icon('forward')}</a></div><div class="grid3 reveal">${grid.map(cvTile).join('')}</div></section>` : ''}
-    ${offers.length ? `<section class="sec"><div class="sec-head"><h2>عروض وخصومات</h2><a href="#/offers">الكل ${icon('forward')}</a></div>
-      <div class="rows reveal">${offers.map((x) => `<a class="rowi" href="${svcLink(x)}"><span class="ri2">${imgTag(x.image, x.title)}</span><div><b>${esc(x.title)}</b><small>خصم <span class="num">${x.discount}%</span> · بدل <s class="num">${fmt(x.price)}</s></small></div><span>${fmt(x.finalPrice)} د.ل</span></a>`).join('')}</div></section>` : ''}
-    ${supportBlock() ? `<section class="sec"><div class="sec-head"><h2>تواصل معنا</h2><a href="#/support">الكل ${icon('forward')}</a></div>${supportBlock()}</section>` : ''}
-    <div class="trust3"><div>${icon('shield')}دفع آمن</div><div>${icon('clock')}تنفيذ سريع</div><div>${icon('support')}دعم ليبي</div></div>
+    ${hero}
+    ${cats.length ? `<section class="sec"><div class="sec-head"><h2>الأقسام الرئيسية</h2><a href="#/categories">عرض الكل ${icon('forward')}</a></div>
+      <div class="cat2 reveal">${cats.slice(0, 6).map(catCard2).join('')}</div></section>` : ''}
+    ${grid.length ? `<section class="sec"><div class="sec-head"><h2>الأكثر مبيعاً</h2><a href="#/offers?all=1">عرض الكل ${icon('forward')}</a></div><div class="grid3 reveal">${grid.map(cvTile).join('')}</div></section>` : ''}
+    ${offers.length ? `<section class="sec"><div class="sec-head"><h2>عروض وخصومات</h2><a href="#/offers">عرض الكل ${icon('forward')}</a></div><div class="rows reveal">${offers.map(pRow).join('')}</div></section>` : ''}
+    ${supportBlock() ? `<section class="sec"><div class="sec-head"><h2>تواصل معنا</h2><a href="#/support">عرض الكل ${icon('forward')}</a></div>${supportBlock()}</section>` : ''}
+    <div class="trust3"><div>${icon('shield')}<span>دفع آمن</span></div><div>${icon('bolt')}<span>تنفيذ سريع</span></div><div>${icon('support')}<span>دعم ليبي</span></div></div>
     ${footer()}`;
   if (n > 1) {
     const track = $('#track'), dots = $$('.b-dots i');
@@ -411,34 +373,32 @@ async function home() {
     S.timers.push(setInterval(() => {
       if (!visible || paused || document.hidden) return;
       idx = (idx + 1) % n;
-      track.children[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+      track.scrollTo({ left: track.children[idx].offsetLeft - track.offsetLeft, behavior: 'smooth' });
     }, 5000));
   }
-}
-function catTile(c) {
-  const vis = c.icon ? icon(c.icon) : imgUrl(c.image) ? imgTag(c.image, c.name) : icon('gamepad');
-  return `<a class="cat-tile" href="#/category/${encodeURIComponent(c.id)}"><span class="ci">${vis}</span><span>${esc(c.name.trim())}</span></a>`;
 }
 
 // كل الأقسام
 async function categoriesPage() {
-  setTop('inner', '', `<a class="btn-icon" href="#/search" aria-label="بحث">${icon('search')}</a>`);
-  view.innerHTML = skGrid(6);
+  setTop('inner', 'الأقسام', `<a class="btn-icon" href="#/cart" aria-label="السلة">${icon('cart')}</a>`);
+  view.innerHTML = `<div class="sk" style="height:48px;margin-top:8px"></div><div class="sec" style="margin-top:16px">${skCats(6)}</div>`;
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
-  if (!S.cat.categories.length) { view.innerHTML = emptyState('grid', 'لا توجد أقسام بعد', 'الأقسام بتظهر هنا أول ما تنضاف', '<a class="btn btn-primary btn-sm" href="#/home">الرئيسية</a>'); return; }
-  const popular = [...S.cat.services].sort((a, b) => b.sold - a.sold || a.order - b.order);
-  view.innerHTML = `<h1 class="page-title">الألعاب والأقسام</h1><div class="cat2 reveal">${S.cat.categories.map(catCard2).join('')}</div>
-    <section class="sec"><div class="sec-head"><h2>أشهر الخدمات</h2></div><div id="pop"></div></section>`;
-  const holder = $('#pop');
-  const sub = document.createElement('div');
-  holder.appendChild(sub);
-  listInto(sub, popular.slice(0, 60), { emptyText: 'لا توجد خدمات بعد' });
+  const all = S.cat.categories;
+  if (!all.length) { view.innerHTML = emptyState('grid', 'لا توجد أقسام بعد', 'الأقسام بتظهر هنا أول ما تنضاف', '<a class="btn btn-primary btn-sm" href="#/home">الرئيسية</a>'); return; }
+  view.innerHTML = `<div class="searchbar">${icon('search')}<input id="cq" type="search" placeholder="ابحث في الأقسام" autocomplete="off" maxlength="40"></div>
+    <div class="cat2 reveal" id="cgrid" style="margin-top:16px">${all.map(catCard2).join('')}</div>`;
+  const inp = $('#cq');
+  inp.addEventListener('input', () => {
+    const t = norm(inp.value);
+    const list = t ? all.filter((c) => norm(c.name).includes(t)) : all;
+    $('#cgrid').innerHTML = list.length ? list.map(catCard2).join('') : `<div style="grid-column:1/-1">${emptyState('search', 'ما لقيناش قسم بهذا الاسم')}</div>`;
+  });
 }
 
 // 5. صفحة اللعبة: ID ← الباقة ← الدفع
 async function categoryPage(id, q) {
   document.body.classList.add('game');
-  view.innerHTML = `<div class="gh"><span class="bg ph"></span></div><div class="sk" style="height:84px;width:84px;margin-top:-40px;border-radius:22px"></div>${skGrid(3)}`;
+  view.innerHTML = `<div class="sk ghero-sk"></div><div class="sk" style="height:48px;margin-top:20px"></div><div class="pk" style="margin-top:20px">${'<div class="sk" style="height:84px"></div>'.repeat(4)}</div>`;
   try { await Promise.all([loadCatalog(), loadConfig()]); } catch (e) { view.innerHTML = errorState(e.message); return; }
   const c = catById(id);
   if (!c) return notFound();
@@ -449,30 +409,30 @@ async function categoryPage(id, q) {
   let inputVal = store.get('gl_id_' + id, '');
   const cover = imgUrl(c.image) || imgUrl(list.find((x) => imgUrl(x.image))?.image);
   const anyAuto = list.some((x) => x.auto);
-  view.innerHTML = `<div class="gh"><span class="bg ${cover ? '' : 'ph'}" ${cover ? `style="background-image:url('${esc(cover)}')"` : ''}></span>
-      <div class="gtop"><button class="pill-ic soft" data-act="back" aria-label="رجوع">${icon('back')}</button><a class="pill-ic soft" href="#/cart" aria-label="السلة">${icon('cart')}${cartCount() ? `<i class="count">${cartCount()}</i>` : ''}</a></div></div>
-    <div class="gid"><span class="gic">${c.icon ? icon(c.icon) : imgTag(c.image, c.name)}</span><div><h1>${esc(c.name.trim())}</h1><small>${icon(anyAuto ? 'bolt' : 'clock')} ${anyAuto ? 'تسليم فوري للأكواد' : 'شحن مباشر · يتنفذ خلال دقائق'}</small></div></div>
-    <div id="gsteps">${list.length ? '' : emptyState('box', 'ما فيش باقات هنا حالياً', 'ارجعلنا بعد شوية', '<a class="btn btn-ghost btn-sm" href="#/categories">الألعاب</a>')}</div>`;
+  const vis = imgUrl(c.image) ? imgTag(c.image, c.name) : icon(c.icon || 'gamepad');
+  view.innerHTML = `<div class="ghero"><span class="bg ${cover ? '' : 'ph'}" ${cover ? `style="background-image:url('${esc(cover)}')"` : ''}></span>
+      <div class="gtop"><button class="pill-ic" data-act="back" aria-label="رجوع">${icon('back')}</button><a class="pill-ic" href="#/cart" aria-label="السلة">${icon('cart')}${cartCount() ? `<i class="count">${cartCount()}</i>` : ''}</a></div>
+      <div class="gt"><span class="gic">${vis}</span><div><h1>${esc(c.name.trim())}</h1><small>${icon(anyAuto ? 'bolt' : 'clock')} ${anyAuto ? 'تسليم فوري للأكواد' : 'شحن مباشر خلال دقائق'}</small></div></div></div>
+    <div id="gsteps">${list.length ? '' : emptyState('box', 'ما فيش باقات هنا حالياً', 'ارجعلنا بعد شوية', '<a class="btn btn-ghost btn-sm" href="#/categories">الأقسام</a>')}</div>`;
   if (!list.length) return;
   const priceOf = (x, qn) => linePrice(x, qn);
   const draw = () => {
     const [flabel, fph] = FIELD_DEF[sel.fieldType] || FIELD_DEF.id;
     const label = sel.fieldLabel || flabel;
-    let n = 1;
     const maxQ = sel.enableQuantity ? sel.qtyMax : sel.auto ? Math.max(1, Math.min(10, sel.stock || 1)) : 10;
     qty = Math.min(maxQ, Math.max(sel.enableQuantity ? sel.qtyMin : 1, qty));
     const total = priceOf(sel, qty);
     const bal = S.me?.balance;
     $('#gsteps').innerHTML = `
-      ${sel.fieldEnabled ? `<div class="step"><h4><i>${n++}</i>${esc(label)}</h4><input id="ginp" class="input ${sel.fieldType === 'id' || sel.fieldType === 'phone' ? 'ltr' : ''}" maxlength="200" value="${esc(inputVal)}" placeholder="${esc(sel.fieldLabel ? 'أدخل ' + sel.fieldLabel : fph)}" ${sel.fieldType === 'phone' || sel.fieldType === 'id' ? 'inputmode="numeric"' : ''}><div class="hint" style="margin-top:6px">${sel.fieldType === 'id' ? 'تلقاه في البروفايل داخل اللعبة تحت الاسم.' : 'تأكد من صحة البيانات قبل الدفع.'}</div></div>` : ''}
-      <div class="step"><h4><i>${n++}</i>اختار الباقة</h4><div class="pk ${list.length < 3 ? 'two' : ''}">${list.map((x) => `<button type="button" class="p ${x === sel ? 'on' : ''} ${isOut(x) ? 'out' : ''}" data-act="pick" data-id="${esc(x.id)}"><span class="ck">${icon('check')}</span>${x.discount > 0 ? `<span class="rib">-${x.discount}%</span>` : x.badge ? `<span class="rib">${esc(x.badge)}</span>` : ''}<span class="pt">${esc(x.title)}</span><span class="pp">${isOut(x) ? 'نفذت' : x.enableQuantity ? 'حسب الكمية' : `${fmt(x.finalPrice)} د.ل`}</span>${x.discount > 0 && !x.enableQuantity ? `<s>${fmt(x.price)}</s>` : ''}</button>`).join('')}</div></div>
-      ${sel.enableQuantity ? `<div class="step"><h4><i>${n++}</i>الكمية <span class="muted" style="font-size:12px">(${sel.qtyMin} - ${sel.qtyMax})</span></h4><input type="range" id="grng" min="${sel.qtyMin}" max="${sel.qtyMax}" value="${qty}" step="1"><input id="gqn" class="input ltr" type="number" inputmode="numeric" min="${sel.qtyMin}" max="${sel.qtyMax}" value="${qty}" style="margin-top:8px"></div>`
+      ${sel.fieldEnabled ? `<div class="step"><h4>${esc(label)}</h4><input id="ginp" class="input ${sel.fieldType === 'id' || sel.fieldType === 'phone' ? 'ltr' : ''}" maxlength="200" value="${esc(inputVal)}" placeholder="${esc(sel.fieldLabel ? 'أدخل ' + sel.fieldLabel : fph)}" ${sel.fieldType === 'phone' || sel.fieldType === 'id' ? 'inputmode="numeric"' : ''}><div class="hint" style="margin-top:6px">${sel.fieldType === 'id' ? 'تلقاه في البروفايل داخل اللعبة تحت الاسم.' : 'تأكد من صحة البيانات قبل الدفع.'}</div></div>` : ''}
+      <div class="step"><h4>اختر الباقة</h4><div class="pk">${list.map((x) => `<button type="button" class="p ${x === sel ? 'on' : ''} ${isOut(x) ? 'out' : ''}" data-act="pick" data-id="${esc(x.id)}"><span class="ck">${icon('check')}</span>${x.discount > 0 ? `<span class="rib">-${x.discount}%</span>` : x.badge ? `<span class="rib">${esc(x.badge)}</span>` : ''}<span class="ph">${imgUrl(x.image) ? imgTag(x.image, x.title) : icon(c.icon || 'gem')}</span><span class="pt">${esc(x.title)}</span><span class="pp">${isOut(x) ? 'نفذت' : x.enableQuantity ? 'حسب الكمية' : `${fmt(x.finalPrice)} <small>د.ل</small>`}${x.discount > 0 && !x.enableQuantity ? ` <s>${fmt(x.price)}</s>` : ''}</span></button>`).join('')}</div></div>
+      ${sel.enableQuantity ? `<div class="step"><h4>الكمية <span class="muted num" style="font-size:12px">${sel.qtyMin} إلى ${sel.qtyMax}</span></h4><input type="range" id="grng" min="${sel.qtyMin}" max="${sel.qtyMax}" value="${qty}" step="1"><input id="gqn" class="input ltr" type="number" inputmode="numeric" min="${sel.qtyMin}" max="${sel.qtyMax}" value="${qty}" style="margin-top:8px"></div>`
         : maxQ > 1 ? `<div class="qty-row" style="margin-top:16px"><span class="label">الكمية</span><div class="stepper"><button type="button" data-act="gdec" aria-label="إنقاص">${icon('minus')}</button><input id="gqn" class="num" value="${qty}" readonly aria-label="الكمية"><button type="button" data-act="ginc" aria-label="زيادة">${icon('plus')}</button></div></div>` : ''}
       ${sel.description ? `<div class="desc-note">${esc(sel.description)}</div>` : ''}
-      <div class="paybox"><div><span>${esc(sel.title)}${qty > 1 && !sel.enableQuantity ? ` × <span class="num">${qty}</span>` : ''}</span><span id="gsum">${fmt(total)} د.ل</span></div>
+      <div class="paybox"><div><span>${esc(sel.title)}${qty > 1 && !sel.enableQuantity ? ` <span class="num">x${qty}</span>` : ''}</span><span id="gsum">${fmt(total)} د.ل</span></div>
         ${bal !== undefined && bal !== null ? `<div><span>رصيد محفظتك</span><span>${fmt(bal)} د.ل</span></div>` : ''}
         <div class="t"><span>تدفع</span><span id="gtot">${fmt(total)} د.ل</span></div></div>
-      <button class="btn btn-primary cta" data-act="gpay" ${isOut(sel) ? 'disabled' : ''}><span class="spin"></span><span class="lbl">${icon('lock')} ${!S.user ? 'سجّل الدخول للشراء' : bal !== undefined && bal < total ? 'رصيدك ما يكفيش · اشحن المحفظة' : `ادفع <b id="gpb">${fmt(total)}</b> د.ل من المحفظة`}</span></button>
+      <button class="btn btn-primary cta" data-act="gpay" ${isOut(sel) ? 'disabled' : ''}><span class="spin"></span><span class="lbl">${icon('lock')} ${!S.user ? 'سجّل الدخول للشراء' : bal !== undefined && bal < total ? 'رصيدك ما يكفيش اشحن المحفظة' : `ادفع <b id="gpb">${fmt(total)}</b> د.ل من المحفظة`}</span></button>
       <div class="g-actions"><button data-act="gcart">${icon('cart', 'ico-sm')} أضف للسلة</button><button class="${S.favs.has(sel.id) ? 'on' : ''}" data-fav="${esc(sel.id)}">${icon('heart', 'ico-sm')} المفضلة</button></div>
       <div class="secure" style="margin-top:12px">${icon('shield')} الدفع من محفظتك آمن ومشفر</div>`;
     const inp = $('#ginp');
@@ -513,7 +473,7 @@ async function categoryPage(id, q) {
     } catch (e) {
       b.classList.remove('load');
       toast(e.message, 'bad', 5000);
-      if (e.status === 402) loadMe().then(draw);
+      if (e.status === 402) loadMe(true).then(draw);
       if (e.status === 409) loadCatalog(true).then(() => render()).catch(() => {});
     }
   };
@@ -522,22 +482,22 @@ async function categoryPage(id, q) {
 function listPage(items, opts = {}) { listInto(view, items, opts); }
 function listInto(root, items, { emptyText = 'لا توجد نتائج', head = '' } = {}) {
   let sort = 'default', page = 1;
+  const base = (x) => linePrice(x, x.enableQuantity ? x.qtyMin : 1);
   const draw = () => {
     let list = [...items];
-    if (sort === 'low') list.sort((a, b) => linePrice(a, a.enableQuantity ? a.qtyMin : 1) - linePrice(b, b.enableQuantity ? b.qtyMin : 1));
-    else if (sort === 'high') list.sort((a, b) => linePrice(b, b.enableQuantity ? b.qtyMin : 1) - linePrice(a, a.enableQuantity ? a.qtyMin : 1));
-    else if (sort === 'off') list = list.filter((s) => s.discount > 0).sort((a, b) => b.discount - a.discount);
-    else if (sort === 'best') list.sort((a, b) => b.sold - a.sold);
-    else if (sort === 'auto') list = list.filter((s) => s.auto);
-    else list.sort((a, b) => a.order - b.order || a.finalPrice - b.finalPrice);
-    const shown = list.slice(0, page * 20);
-    $('#grid').innerHTML = shown.length ? shown.map(pCard).join('') : `<div style="grid-column:1/-1">${emptyState('box', emptyText, '', '<a class="btn btn-ghost btn-sm" href="#/categories">تصفّح الأقسام</a>')}</div>`;
+    if (sort === 'low') list.sort((a, b) => base(a) - base(b));
+    else if (sort === 'high') list.sort((a, b) => base(b) - base(a));
+    else if (sort === 'off') list = list.filter((x) => x.discount > 0).sort((a, b) => b.discount - a.discount);
+    else if (sort === 'auto') list = list.filter((x) => x.auto);
+    const shown = list.slice(0, page * 30);
+    $('#plist').innerHTML = shown.length ? shown.map(pRow).join('') : emptyState('box', emptyText, '', '<a class="btn btn-ghost btn-sm" href="#/categories">تصفّح الأقسام</a>');
+    $('#plist').classList.toggle('rows', !!shown.length);
     $('#more').classList.toggle('hidden', list.length <= shown.length);
     $$('.toolbar .chip').forEach((ch) => ch.classList.toggle('active', ch.dataset.sort === sort));
   };
-  const chips = [['default', 'الكل'], ['low', 'الأقل سعراً'], ['high', 'الأعلى سعراً'], ['best', 'الأكثر مبيعاً'], ['off', 'خصم'], ['auto', 'تسليم فوري']];
+  const chips = [['default', 'الكل'], ['low', 'الأقل سعراً'], ['high', 'الأعلى سعراً'], ['off', 'خصومات'], ['auto', 'تسليم فوري']];
   root.innerHTML = `${head}<div class="toolbar">${chips.map(([k, t]) => `<button class="chip" data-act="sort" data-sort="${k}">${t}</button>`).join('')}</div>
-    <div class="p-grid wide reveal" id="grid"></div><button class="btn btn-ghost btn-block hidden" id="more" data-act="more" style="margin-top:16px">تحميل المزيد</button>`;
+    <div class="rows reveal" id="plist"></div><button class="btn btn-ghost btn-block hidden" id="more" data-act="more" style="margin-top:16px">عرض المزيد</button>`;
   S.actions.sort = (b) => { sort = b.dataset.sort; page = 1; draw(); };
   S.actions.more = () => { page++; draw(); };
   draw();
@@ -545,30 +505,30 @@ function listInto(root, items, { emptyText = 'لا توجد نتائج', head = 
 async function offersPage(q) {
   const all = q && q.get('all');
   setTop('inner', all ? 'الأكثر مبيعاً' : 'العروض');
-  view.innerHTML = skGrid(4);
+  view.innerHTML = skRows(6);
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
-  if (all) return listPage([...S.cat.services].sort((a, b) => b.sold - a.sold), { emptyText: 'لا توجد خدمات بعد' });
-  listPage(S.cat.services.filter((s) => s.discount > 0), { emptyText: 'لا توجد عروض حالياً تابعنا قريباً' });
+  if (all) return listPage([...S.cat.services].sort((a, b) => b.sold - a.sold || a.order - b.order), { emptyText: 'لا توجد خدمات بعد' });
+  listPage(S.cat.services.filter((x) => x.discount > 0), { emptyText: 'لا توجد عروض حالياً تابعنا قريباً' });
 }
 async function favoritesPage() {
   setTop('inner', 'المفضلة');
-  view.innerHTML = skGrid(4);
+  view.innerHTML = skRows(4);
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
-  const list = S.cat.services.filter((s) => S.favs.has(s.id));
-  if (!list.length) { view.innerHTML = emptyState('heart', 'المفضلة فاضية', 'اضغط على القلب في أي خدمة لحفظها هنا', '<a class="btn btn-primary btn-sm" href="#/categories">تصفح الخدمات</a>'); return; }
-  view.innerHTML = `<div class="p-grid wide">${list.map(pCard).join('')}</div>`;
+  const list = S.cat.services.filter((x) => S.favs.has(x.id));
+  if (!list.length) { view.innerHTML = emptyState('heart', 'المفضلة فاضية', 'اضغط على القلب في أي باقة لحفظها هنا', '<a class="btn btn-primary btn-sm" href="#/categories">تصفح الأقسام</a>'); return; }
+  view.innerHTML = `<div class="rows reveal" style="margin-top:8px">${list.map(pRow).join('')}</div>`;
 }
 async function searchPage(q) {
   setTop('inner', 'البحث');
-  view.innerHTML = `<div class="searchbar" style="margin-top:4px">${icon('search')}<input id="q" type="search" placeholder="ابحث عن لعبة أو بطاقة..." value="${esc(q.get('q') || '')}" autocomplete="off" maxlength="60"></div><div id="res" style="margin-top:18px"></div>`;
+  view.innerHTML = `<div class="searchbar">${icon('search')}<input id="q" type="search" placeholder="ابحث عن لعبة أو بطاقة" value="${esc(q.get('q') || '')}" autocomplete="off" maxlength="60"></div><div id="res" style="margin-top:20px"></div>`;
   try { await loadCatalog(); } catch (e) { $('#res').innerHTML = errorState(e.message); return; }
   const inp = $('#q');
   const draw = () => {
     const t = norm(inp.value);
-    if (!t) { $('#res').innerHTML = `<div class="sec-head"><h2>الأقسام</h2></div><div class="chips" style="flex-wrap:wrap">${S.cat.categories.map((c) => `<a class="chip" href="#/category/${encodeURIComponent(c.id)}">${esc(c.name)}</a>`).join('')}</div>`; return; }
+    if (!t) { $('#res').innerHTML = `<div class="sec-head"><h2>الأقسام</h2></div><div class="chips wrap">${S.cat.categories.map((c) => `<a class="chip" href="#/category/${encodeURIComponent(c.id)}">${esc(c.name)}</a>`).join('')}</div>`; return; }
     const cats = new Map(S.cat.categories.map((c) => [c.id, norm(c.name)]));
-    const res = S.cat.services.filter((s) => norm(s.title).includes(t) || (cats.get(s.category) || '').includes(t) || norm(s.description).includes(t)).slice(0, 60);
-    $('#res').innerHTML = res.length ? `<p class="page-sub">${res.length} نتيجة</p><div class="p-grid wide">${res.map(pCard).join('')}</div>` : emptyState('search', 'لا توجد نتائج', 'جرّب كلمة أخرى');
+    const res = S.cat.services.filter((x) => norm(x.title).includes(t) || (cats.get(x.category) || '').includes(t) || norm(x.description).includes(t)).slice(0, 60);
+    $('#res').innerHTML = res.length ? `<p class="page-sub"><span class="num">${res.length}</span> نتيجة</p><div class="rows">${res.map(pRow).join('')}</div>` : emptyState('search', 'لا توجد نتائج', 'جرّب كلمة أخرى');
   };
   inp.addEventListener('input', draw);
   draw();
@@ -576,83 +536,12 @@ async function searchPage(q) {
 }
 
 // 6. تفاصيل الخدمة
-const FIELD_DEF = { id: ['معرّف اللاعب (ID)', 'أدخل الـ ID الخاص بك'], phone: ['رقم الهاتف', '09XXXXXXXX'], account: ['رابط أو اسم الحساب', 'رابط الحساب أو اسم المستخدم'], custom: ['البيانات المطلوبة', 'أدخل البيانات المطلوبة'] };
+const FIELD_DEF = { id: ['معرّف اللاعب (Player ID)', 'أدخل معرّف اللاعب'], phone: ['رقم الهاتف', '09XXXXXXXX'], account: ['رابط أو اسم الحساب', 'رابط الحساب أو اسم المستخدم'], custom: ['البيانات المطلوبة', 'أدخل البيانات المطلوبة'] };
 async function servicePage(id) {
-  try { await loadCatalog(); } catch {}
+  try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
   const x = svcById(id);
   if (x) { location.replace(svcLink(x)); return; }
-  return servicePageOld(id);
-}
-async function servicePageOld(id) {
-  setTop('inner', 'تفاصيل الخدمة');
-  view.innerHTML = `<div class="sk" style="aspect-ratio:16/10;border-radius:28px;margin-top:4px"></div><div class="sk" style="height:28px;width:70%;margin-top:18px"></div><div class="sk" style="height:140px;margin-top:18px"></div>`;
-  try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
-  const s = svcById(id);
-  if (!s) return notFound();
-  const c = catById(s.category);
-  setTop('inner', c ? c.name : 'تفاصيل الخدمة', `<button class="btn-icon" data-act="share" aria-label="مشاركة">${icon('send')}</button>`);
-  const out = s.auto && s.stock === 0;
-  const [flabel, fph] = FIELD_DEF[s.fieldType] || FIELD_DEF.id;
-  const label = s.fieldLabel || flabel;
-  let qty = s.enableQuantity ? s.qtyMin : 1;
-  const maxQty = s.enableQuantity ? s.qtyMax : s.auto ? Math.max(1, Math.min(10, s.stock || 1)) : 10;
-  const related = S.cat.services.filter((x) => x.category === s.category && x.id !== s.id).slice(0, 10);
-  view.innerHTML = `
-    <div class="svc-hero">${imgTag(s.image, s.title)}<div class="svc-badges">
-      ${s.auto ? (out ? '<span class="badge">نفذت الكمية</span>' : `<span class="badge ok">${icon('bolt')} تسليم فوري</span><span class="badge">متوفر <span class="num">${s.stock}</span></span>`) : `<span class="badge">${icon('clock')} يتنفذ خلال دقائق</span>`}
-      ${s.discount > 0 ? `<span class="badge sale"><span class="num">${s.discount}%</span> خصم</span>` : ''}${s.badge ? `<span class="badge">${esc(s.badge)}</span>` : ''}</div></div>
-    <div class="svc-head"><h1>${esc(s.title)}</h1></div>
-    <div class="svc-price">${s.enableQuantity ? `<b><span class="num" id="unitP">${fmt(linePrice(s, s.qtyMin))}</span> <span class="cur">د.ل / ${s.qtyMin}</span></b>` : `<b><span class="num">${fmt(s.finalPrice)}</span> <span class="cur">د.ل</span></b>${s.discount > 0 ? `<s class="num">${fmt(s.price)}</s>` : ''}`}</div>
-    ${s.description ? `<div class="svc-desc">${esc(s.description)}</div>` : ''}
-    <div class="box">
-      ${s.fieldEnabled ? `<div class="field"><label for="inp">${esc(label)}</label><input id="inp" class="input ${s.fieldType === 'phone' || s.fieldType === 'id' ? 'ltr' : ''}" maxlength="200" placeholder="${esc(s.fieldLabel ? 'أدخل ' + s.fieldLabel : fph)}" ${s.fieldType === 'phone' ? 'inputmode="tel"' : ''}><span class="hint">تأكد من صحة البيانات الطلب يُنفّذ عليها مباشرة</span></div>` : ''}
-      ${s.enableQuantity ? `<div class="field"><label>الكمية <span class="muted">(${s.qtyMin} - ${s.qtyMax})</span></label>
-          <input type="range" id="rng" min="${s.qtyMin}" max="${s.qtyMax}" value="${s.qtyMin}" step="1">
-          <input id="qn" class="input ltr" type="number" inputmode="numeric" min="${s.qtyMin}" max="${s.qtyMax}" value="${s.qtyMin}"></div>`
-        : `<div class="qty-row"><span class="label">الكمية</span><div class="stepper"><button type="button" data-act="dec" aria-label="إنقاص">${icon('minus')}</button><input id="qn" class="num" value="1" inputmode="numeric" aria-label="الكمية"><button type="button" data-act="inc" aria-label="زيادة">${icon('plus')}</button></div></div>`}
-      <div class="total-row"><span>الإجمالي</span><b><span class="num" id="tot">${fmt(linePrice(s, qty))}</span> <small class="cur">د.ل</small></b></div>
-    </div>
-    <div class="buy-actions">
-      <button class="btn btn-primary btn-block" data-act="buyNow" ${out ? 'disabled' : ''}>${out ? 'غير متوفر حالياً' : 'اشترِ الآن'}</button>
-      <div class="row2"><button class="btn btn-ghost" data-act="addCart" ${out ? 'disabled' : ''}>${icon('cart')} أضف إلى السلة</button><button class="btn-icon ${S.favs.has(s.id) ? 'on' : ''}" data-fav="${esc(s.id)}" aria-label="المفضلة">${icon('heart')}</button></div>
-      <div class="secure">${icon('lock')} الدفع آمن ومشفر 100%</div>
-    </div>
-    ${related.length ? `<section class="sec"><div class="sec-head"><h2>خدمات مشابهة</h2></div><div class="h-scroll">${related.map(pCard).join('')}</div></section>` : ''}`;
-  const qn = $('#qn'), rng = $('#rng'), tot = $('#tot');
-  const setQty = (v) => {
-    v = Math.round(Number(v));
-    if (!Number.isFinite(v)) v = s.enableQuantity ? s.qtyMin : 1;
-    qty = Math.min(maxQty, Math.max(s.enableQuantity ? s.qtyMin : 1, v));
-    qn.value = qty; if (rng) rng.value = qty;
-    tot.textContent = fmt(linePrice(s, qty));
-  };
-  qn.addEventListener('change', () => setQty(qn.value));
-  if (rng) rng.addEventListener('input', () => setQty(rng.value));
-  S.actions.inc = () => setQty(qty + 1);
-  S.actions.dec = () => setQty(qty - 1);
-  S.actions.share = async () => {
-    const url = location.href;
-    try { if (navigator.share) await navigator.share({ title: s.title, url }); else copyText(url); } catch {}
-  };
-  const collect = () => {
-    const input = s.fieldEnabled ? $('#inp').value.trim() : '';
-    if (s.fieldEnabled && input.length < 2) { $('#inp').focus(); toast(`أدخل ${label}`, 'bad'); return null; }
-    setQty(qn.value);
-    return { serviceId: s.id, qty, input };
-  };
-  S.actions.addCart = () => {
-    const it = collect(); if (!it) return;
-    const same = S.cart.find((c) => c.serviceId === it.serviceId && c.input === it.input && !s.enableQuantity);
-    if (same) same.qty = Math.min(maxQty, same.qty + it.qty);
-    else S.cart.push({ key: uuid(), ...it });
-    saveCart();
-    toast('أُضيفت إلى السلة', 'ok', 1800);
-  };
-  S.actions.buyNow = () => {
-    const it = collect(); if (!it) return;
-    if (!S.user) return go(`#/login?next=${encodeURIComponent('service/' + s.id)}`);
-    checkout([it], { title: s.title });
-  };
+  notFound();
 }
 
 // تنفيذ الشراء (مشترك بين "اشترِ الآن" والسلة)
@@ -674,8 +563,8 @@ async function checkout(items, { fromCart = false } = {}) {
   const contact = store.get('gl_contact', S.me.phone || '');
   const ok = await confirmSheet({
     title: 'تأكيد الطلب',
-    text: `${lines.map((l) => `• ${esc(l.s.title)} × <span class="num">${l.it.qty}</span>`).join('<br>')}<br><br>الإجمالي: <b class="gold">${money(total)}</b><br>رصيدك بعد الشراء: ${money(r3(bal - total))}`,
-    inputs: `<div class="field" style="margin-top:6px"><label>رقم التواصل (واتساب) · اختياري</label><input class="input ltr" data-in="contact" inputmode="tel" maxlength="30" value="${esc(contact)}" placeholder="09XXXXXXXX"></div>`,
+    text: `${lines.map((l) => `${esc(l.s.title)} <span class="num">x${l.it.qty}</span>`).join('<br>')}<br><br>الإجمالي <b class="gold">${money(total)}</b><br>رصيدك بعد الشراء ${money(r3(bal - total))}`,
+    inputs: `<div class="field" style="margin-top:6px"><label>رقم التواصل واتساب (اختياري)</label><input class="input ltr" data-in="contact" inputmode="tel" maxlength="30" value="${esc(contact)}" placeholder="09XXXXXXXX"></div>`,
     ok: 'تأكيد الشراء',
   });
   if (!ok) return;
@@ -692,7 +581,7 @@ async function checkout(items, { fromCart = false } = {}) {
   } catch (e) {
     closeSheet();
     toast(e.message, 'bad', 5000);
-    if (e.status === 402) loadMe();
+    if (e.status === 402) loadMe(true);
     if (e.status === 409) loadCatalog(true).then(() => render()).catch(() => {});
   }
 }
@@ -701,7 +590,7 @@ function showOrderSuccess(r) {
     const autos = r.orders.filter((o) => o.auto);
     sheet(`<div class="center-t"><div class="success-ic">${icon('check')}</div><h3>${autos.length ? 'تم تسليم طلبك' : 'تم استلام طلبك'}</h3>
       <p class="t2">${autos.length ? 'الكود جاهز في صفحة الطلب' : 'بيتم تنفيذ طلبك خلال دقائق وبيوصلك إشعار أول ما يتنفذ'}</p>
-      <p class="muted" style="font-size:13px">رصيدك الحالي: ${money(r.balance)}</p>
+      <p class="muted" style="font-size:13px">رصيدك الحالي ${money(r.balance)}</p>
       <div style="display:grid;gap:10px;margin-top:14px">
       ${autos.length === 1 ? `<a class="btn btn-primary btn-block" href="#/order/${encodeURIComponent(autos[0].id)}" data-act="cls">عرض الكود</a>` : ''}
       <a class="btn ${autos.length === 1 ? 'btn-soft' : 'btn-primary'} btn-block" href="#/orders" data-act="cls">طلباتي</a></div></div>`, { center: true });
@@ -722,22 +611,23 @@ async function cartPage() {
       const p = linePrice(s, it.qty); total += p;
       const out = s.auto && s.stock < it.qty;
       if (out) invalid++;
-      return `<div class="c-item"><a class="c-thumb" href="#/service/${encodeURIComponent(s.id)}">${imgTag(s.image, s.title)}</a><div class="c-info"><b>${esc(s.title)}</b>
-        <span class="meta">${it.input ? esc(it.input) : s.auto ? 'تسليم فوري' : '—'}${out ? ' • <span style="color:var(--bad)">الكمية غير متوفرة</span>' : ''}</span>
+      return `<div class="c-item"><a class="c-thumb" href="${svcLink(s)}">${imgTag(s.image, s.title)}</a><div class="c-info"><b>${esc(s.title)}</b>
+        <span class="meta">${it.input ? esc(it.input) : s.auto ? 'تسليم فوري' : ''}</span>${out ? '<span class="meta bad">الكمية غير متوفرة</span>' : ''}
         <div class="c-foot"><b class="gold"><span class="num">${fmt(p)}</span> <small>د.ل</small></b>
-        ${s.enableQuantity ? `<span class="badge badge-gold num">× ${it.qty}</span>` : `<div class="stepper"><button data-act="q" data-key="${esc(it.key)}" data-d="-1" aria-label="إنقاص">${it.qty > 1 ? icon('minus') : icon('trash')}</button><input class="num" value="${it.qty}" readonly aria-label="الكمية"><button data-act="q" data-key="${esc(it.key)}" data-d="1" aria-label="زيادة">${icon('plus')}</button></div>`}
+        ${s.enableQuantity ? `<span class="badge badge-gold num">x${it.qty}</span>` : `<div class="stepper"><button data-act="q" data-key="${esc(it.key)}" data-d="-1" aria-label="إنقاص">${it.qty > 1 ? icon('minus') : icon('trash')}</button><input class="num" value="${it.qty}" readonly aria-label="الكمية"><button data-act="q" data-key="${esc(it.key)}" data-d="1" aria-label="زيادة">${icon('plus')}</button></div>`}
         </div></div></div>`;
     }).join('');
     total = r3(total);
     const bal = S.me?.balance ?? null;
     view.innerHTML = `<div style="margin-top:4px">${items}</div>
-      <div class="summary"><div class="row"><span>عدد الخدمات</span><span class="num">${S.cart.length}</span></div>
-      ${bal !== null ? `<div class="row"><span>رصيدك الحالي</span><span>${money(bal)}</span></div>` : ''}
+      <div class="summary"><div class="row"><span>عدد المنتجات</span><span class="num">${S.cart.length}</span></div>
+      <div class="row"><span>المجموع الفرعي</span><span>${money(total)}</span></div>
       <div class="row big"><span>الإجمالي</span><b>${money(total)}</b></div>
       ${bal !== null && bal < total ? `<div class="row low"><span>ينقصك</span><span>${money(r3(total - bal))}</span></div>` : ''}</div>
+      ${bal !== null ? `<a class="wal-line" href="#/wallet"><span class="wl-ic">${icon('wallet')}</span><span>رصيد المحفظة</span><b>${money(bal)}</b></a>` : ''}
       <div style="display:grid;gap:10px;margin-top:16px">
       ${bal !== null && bal < total ? `<a class="btn btn-ghost btn-block" href="#/wallet">${icon('plus')} اشحن رصيدك</a>` : ''}
-      <button class="btn btn-primary btn-block" data-act="pay" ${invalid ? 'disabled' : ''}>${S.user ? 'إتمام الشراء' : 'سجّل الدخول لإتمام الشراء'}</button>
+      <button class="btn btn-primary btn-block" data-act="pay" ${invalid ? 'disabled' : ''}>${S.user ? 'إتمام الدفع' : 'سجّل الدخول لإتمام الدفع'}</button>
       <div class="secure">${icon('lock')} الدفع آمن ومشفر 100%</div></div>`;
   };
   S.actions.q = (b) => {
@@ -756,7 +646,7 @@ async function cartPage() {
 
 // 8. المحفظة
 var PM_ICON = { libyana: 'sim', madar: 'sim', cards: 'card', onepay: 'bank', lypay: 'bank', crypto: 'crypto' };
-const PM_SUB = { libyana: 'تحويل رصيد', madar: 'تحويل رصيد', cards: 'كرت شحن', onepay: 'تحويل بنكي', lypay: 'تحويل بنكي' };
+const PM_SUB = { libyana: 'تحويل رصيد', madar: 'تحويل رصيد', cards: 'كرت شحن', onepay: 'تحويل بنكي', lypay: 'تحويل بنكي', crypto: 'USDT' };
 function pmIco(k) {
   const img = imgUrl(S.cfg?.settings?.payments?.[k]?.image);
   return `<span class="pm-ico">${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : icon(PM_ICON[k] || 'coin')}</span>`;
@@ -768,14 +658,14 @@ async function walletPage() {
   try { await Promise.all([loadConfig(), loadMe()]); } catch (e) { view.innerHTML = errorState(e.message); return; }
   if (!S.me) return;
   const pms = Object.entries(S.cfg.settings.payments).filter(([, p]) => p.enabled);
-  view.innerHTML = `<div class="wallet-hero"><div><small>رصيدك الحالي</small><div class="amt">${money(S.me.balance)}</div></div><span class="wi">${icon('wallet')}</span></div>
-    <div class="wallet-actions"><a class="btn btn-primary" href="#wallet-methods" data-act="toMethods">${icon('plus')} إيداع</a><a class="btn btn-ghost" href="#/deposits">سجل المعاملات</a></div>
-    <section class="sec" id="wallet-methods"><div class="sec-head"><h2>طرق الدفع</h2></div>
-    ${pms.length ? `<div class="pm-grid reveal">${pms.map(([k, p]) => `<a class="pm-tile" href="#/deposit/${k}">${pmIco(k)}<span>${esc(p.label)}</span></a>`).join('')}</div>` : emptyState('wallet', 'لا توجد طرق دفع متاحة حالياً')}</section>
-    <section class="sec"><div class="sec-head"><h2>آخر الإيداعات</h2><a href="#/deposits">عرض الكل ${icon('forward')}</a></div><div id="recent"><div class="sk" style="height:56px"></div></div></section>`;
+  view.innerHTML = `<div class="wallet-hero"><span class="wh-mark">${logoMark('')}</span><small>الرصيد الحالي</small><div class="amt">${money(S.me.balance)}</div>
+      <div class="wh-act"><a class="btn" href="#wallet-methods" data-act="toMethods">${icon('plus')} شحن الرصيد</a><a class="btn" href="#/deposits">${icon('history')} سجل المعاملات</a></div></div>
+    <section class="sec" id="wallet-methods"><div class="sec-head"><h2>اختر طريقة الدفع</h2></div>
+    ${pms.length ? `<div class="rows reveal">${pms.map(([k, p]) => `<a class="pm-row" href="#/deposit/${k}">${pmIco(k)}<span class="pm-t"><b>${esc(p.label)}</b><small>${esc(PM_SUB[k] || (k === 'crypto' ? 'USDT' : ''))}</small></span>${icon('forward', 'chev')}</a>`).join('')}</div>` : emptyState('wallet', 'لا توجد طرق دفع متاحة حالياً')}</section>
+    <section class="sec"><div class="sec-head"><h2>آخر الإيداعات</h2><a href="#/deposits">عرض الكل ${icon('forward')}</a></div><div id="recent"><div class="sk" style="height:64px"></div></div></section>`;
   api('/api/deposits').then((r) => {
     const el = $('#recent'); if (!el) return;
-    el.innerHTML = r.deposits.length ? `<div class="list pad reveal">${r.deposits.slice(0, 4).map(depRow).join('')}</div>` : emptyState('wallet', 'ما عندكش إيداعات سابقة', 'اختار طريقة دفع من فوق وابدا');
+    el.innerHTML = r.deposits.length ? `<div class="rows reveal">${r.deposits.slice(0, 4).map(depRow).join('')}</div>` : emptyState('wallet', 'ما عندكش إيداعات سابقة', 'اختار طريقة دفع من فوق وابدا');
   }).catch(() => { const el = $('#recent'); if (el) el.innerHTML = ''; });
   S.actions.toMethods = () => $('#wallet-methods').scrollIntoView({ behavior: 'smooth' });
 }
@@ -798,7 +688,7 @@ async function depositPage(method) {
   else if (method === 'cards') fields = `<div class="field"><label>نوع الكرت</label><select class="select" name="cardProvider"><option value="libyana">ليبيانا</option><option value="madar">مدار</option></select></div><div class="field"><label>رقم الكرت</label><input class="input ltr" name="cardCode" inputmode="numeric" placeholder="أدخل رقم الكرت" maxlength="30" required></div>${amt.replace('المبلغ (د.ل)', 'قيمة الكرت (د.ل)')}`;
   else if (method === 'onepay' || method === 'lypay') fields = `<div class="field"><label>اسم المحوِّل (كما يظهر في التحويل)</label><input class="input" name="senderName" maxlength="60" placeholder="الاسم الكامل" required></div>${amt}`;
   else if (method === 'crypto') fields = `<div class="field"><label>معرّفك (Binance / Bybit ID)</label><input class="input ltr" name="cryptoId" maxlength="80" placeholder="Pay ID" required></div>
-    <div class="field"><label>المبلغ بالدولار (USDT)</label><input class="input ltr" name="usd" type="number" inputmode="decimal" step="0.01" min="1" placeholder="0.00" required></div><div class="hint" id="lyd">يعادل: 0.00 د.ل (1$ = ${fmt(st.usdRate)} د.ل)</div>`;
+    <div class="field"><label>المبلغ بالدولار (USDT)</label><input class="input ltr" name="usd" type="number" inputmode="decimal" step="0.01" min="1" placeholder="0.00" required></div><div class="hint" id="lyd">يعادل 0.00 د.ل (الدولار ب ${fmt(st.usdRate)} د.ل)</div>`;
   view.innerHTML = `<div class="dep-head">${pmIco(method)}<div><h2>${esc(p.label)}</h2>${p.note ? `<p>${esc(p.note)}</p>` : ''}</div></div>
     <form id="f" class="box" novalidate>${numBox}<div class="field"><label><span class="step-n">${stepNo}</span>أدخل بيانات التحويل</label></div>${fields}</form>
     <div class="box"><b style="font-size:14px">ملاحظات</b><ul class="notes">
@@ -806,7 +696,7 @@ async function depositPage(method) {
       <li>أقل مبلغ ${fmt(st.depositMin)} د.ل وأعلى مبلغ ${fmt(st.depositMax)} د.ل</li></ul></div>
     <button class="btn btn-primary btn-block" style="margin-top:16px" data-act="send">تأكيد الإيداع</button>`;
   const f = $('#f');
-  if (method === 'crypto') f.usd.addEventListener('input', () => { $('#lyd').textContent = `يعادل: ${fmt(Number(f.usd.value || 0) * st.usdRate)} د.ل (1$ = ${fmt(st.usdRate)} د.ل)`; });
+  if (method === 'crypto') f.usd.addEventListener('input', () => { $('#lyd').textContent = `يعادل ${fmt(Number(f.usd.value || 0) * st.usdRate)} د.ل (الدولار ب ${fmt(st.usdRate)} د.ل)`; });
   S.actions.send = (b) => busy(b, async () => {
     const body = { method };
     for (const el of f.elements) if (el.name) body[el.name] = el.value.trim();
@@ -834,7 +724,7 @@ async function depositsPage() {
   let r;
   try { r = await api('/api/deposits'); } catch (e) { view.innerHTML = errorState(e.message); return; }
   if (!r.deposits.length) { view.innerHTML = emptyState('wallet', 'ما عندكش إيداعات سابقة', '', '<a class="btn btn-primary btn-sm" href="#/wallet">إيداع رصيد</a>'); return; }
-  view.innerHTML = `<div class="list pad reveal" style="margin-top:8px">${r.deposits.map(depRow).join('')}</div>`;
+  view.innerHTML = `<div class="rows reveal" style="margin-top:8px">${r.deposits.map(depRow).join('')}</div>`;
 }
 
 // 10. حسابي
@@ -859,7 +749,7 @@ async function accountPage() {
       <a class="btn btn-ghost btn-xs" href="#/profile">تعديل</a></div>
     <div class="list info-rows">
       <div class="row-link"><span class="rt"><b>الرصيد</b></span><span class="val hl">${money(me.balance)}</span></div>
-      <div class="row-link"><span class="rt"><b>رقم الهاتف</b></span><span class="val num">${esc(me.phone || '—')}</span></div>
+      <div class="row-link"><span class="rt"><b>رقم الهاتف</b></span><span class="val num">${esc(me.phone || 'غير مضاف')}</span></div>
       <div class="row-link"><span class="rt"><b>تاريخ التسجيل</b></span><span class="val num">${fmtDate(me.createdAt)}</span></div></div>
     <div class="sec-label">حسابي</div><div class="list">
       <a class="row-link" href="#/orders"><span class="ri">${icon('receipt')}</span><span class="rt"><b>طلباتي</b></span>${icon('forward', 'chev')}</a>
@@ -896,7 +786,7 @@ async function profilePage() {
     busy(f.querySelector('[type=submit]'), async () => {
       const body = { name: f.fullname.value.trim() };
       if (f.phone.value.trim()) body.phone = f.phone.value.trim();
-      try { await api('/api/me', { method: 'PATCH', body }); await loadMe(); toast('تم الحفظ', 'ok'); go('#/account'); } catch (err) { toast(err.message, 'bad'); }
+      try { await api('/api/me', { method: 'PATCH', body }); await loadMe(true); toast('تم الحفظ', 'ok'); go('#/account'); } catch (err) { toast(err.message, 'bad'); }
     });
   });
 }
@@ -929,12 +819,12 @@ async function ordersPage(q) {
   let filter = q.get('s') || 'all';
   const draw = () => {
     const list = filter === 'all' ? r.orders : r.orders.filter((o) => o.status === filter);
-    view.innerHTML = `<div class="toolbar">${[['all', 'الكل'], ['completed', 'مكتمل'], ['pending', 'معلّق'], ['rejected', 'مرفوض']].map(([k, t]) => `<button class="chip ${filter === k ? 'active' : ''}" data-act="f" data-k="${k}">${t}</button>`).join('')}</div>
-      ${list.length ? '<div class="reveal">' + list.map((o) => {
+    view.innerHTML = `<div class="toolbar">${[['all', 'الكل'], ['completed', 'مكتملة'], ['pending', 'قيد التنفيذ'], ['rejected', 'ملغاة']].map(([k, t]) => `<button class="chip ${filter === k ? 'active' : ''}" data-act="f" data-k="${k}">${t}</button>`).join('')}</div>
+      ${list.length ? '<div class="rows reveal">' + list.map((o) => {
         const img = o.image || svcById(o.serviceId)?.image;
         return `<a class="o-card" href="#/order/${encodeURIComponent(o.id)}"><span class="c-thumb">${imgTag(img, o.title)}</span>
-          <div style="min-width:0"><b>${esc(o.title)}</b><small><span class="num">#${esc(o.id.slice(0, 6).toUpperCase())}</span> • ${timeAgo(o.createdAt)}</small>${o.hasCodes && o.status === 'completed' ? '<small class="gold" style="display:block">الكود جاهز</small>' : ''}</div>
-          <div class="o-side"><span class="price">${money(o.total)}</span>${statusBadge(o.status)}</div></a>`;
+          <div class="o-mid"><small class="num o-id">#GL-${esc(o.id.slice(0, 6).toUpperCase())}</small><b>${esc(o.title)}</b><span class="o-pr">${money(o.total)}</span></div>
+          <div class="o-side">${statusBadge(o.status)}<small class="num">${fmtDate(o.createdAt)}</small>${o.hasCodes && o.status === 'completed' ? '<small class="gold">الكود جاهز</small>' : ''}</div></a>`;
       }).join('') + '</div>' : emptyState('box', '', filter === 'all' ? 'لا توجد طلبات سابقة. ابدأ التسوق الآن' : 'لا توجد طلبات بهذي الحالة', filter === 'all' ? '<a class="btn btn-primary btn-sm" href="#/categories">تصفّح الأقسام</a>' : '')}`;
   };
   S.actions.f = (b) => { filter = b.dataset.k; draw(); };
@@ -952,17 +842,17 @@ async function orderPage(id) {
   view.innerHTML = `<div class="status-line" style="color:${stIcon[1]};background:${stIcon[2]}">${icon(stIcon[0])}<div>${stIcon[3]}<small>${o.status === 'pending' ? 'بيوصلك إشعار أول ما يتنفذ' : o.status === 'rejected' ? 'المبلغ رجع لمحفظتك' : fmtDate(o.createdAt, true)}</small></div></div>
     ${o.codes && o.codes.length ? `<div class="box"><b>${o.codes.length > 1 ? 'الأكواد' : 'الكود'}</b>${o.codes.map((c) => `<div class="code-box"><code>${esc(c)}</code><button class="btn btn-soft btn-sm" data-copy="${esc(c)}">${icon('copy', 'ico-sm')} نسخ</button></div>`).join('')}
       <span class="hint">ما تشاركش الكود مع أي حد</span></div>` : ''}
-    ${o.note ? `<div class="announce">${icon('info')}<span>${esc(o.note)}</span></div>` : ''}${o.reason ? `<div class="announce" style="color:var(--bad)">${icon('alert')}<span>سبب الرفض: ${esc(o.reason)}</span></div>` : ''}
+    ${o.note ? `<div class="announce">${icon('info')}<span>${esc(o.note)}</span></div>` : ''}${o.reason ? `<div class="announce" style="color:var(--bad)">${icon('alert')}<span>سبب الرفض ${esc(o.reason)}</span></div>` : ''}
     <div class="box kv">
       <div><span>الخدمة</span><span>${esc(o.title)}</span></div>
-      <div><span>رقم الطلب</span><span class="num" data-copy="${esc(o.id)}" style="cursor:pointer">#${esc(o.id.slice(0, 8).toUpperCase())} ${icon('copy', 'ico-sm')}</span></div>
+      <div><span>رقم الطلب</span><span class="num" data-copy="${esc(o.id)}" style="cursor:pointer">#GL-${esc(o.id.slice(0, 6).toUpperCase())} ${icon('copy', 'ico-sm')}</span></div>
       <div><span>التاريخ</span><span class="num">${fmtDate(o.createdAt, true)}</span></div>
       <div><span>الكمية</span><span class="num">${o.quantity}</span></div>
       ${o.input ? `<div><span>البيانات</span><span>${esc(o.input)}</span></div>` : ''}
       <div><span>طريقة التسليم</span><span>${o.delivery === 'auto' ? 'تلقائي' : 'يدوي'}</span></div>
       <div><span>الحالة</span><span>${statusBadge(o.status)}</span></div>
       <div style="padding-top:10px;border-top:1px solid var(--line)"><span>المبلغ</span><b class="gold">${money(o.total)}</b></div></div>
-    ${supWa ? `<a class="btn btn-ghost btn-block" style="margin-top:16px" target="_blank" rel="noopener" href="${esc(waLink(supWa.number))}?text=${encodeURIComponent('استفسار عن الطلب #' + o.id.slice(0, 8).toUpperCase())}">${icon('support')} تواصل مع الدعم بخصوص الطلب</a>` : ''}`;
+    ${supWa ? `<a class="btn btn-ghost btn-block" style="margin-top:16px" target="_blank" rel="noopener" href="${esc(waLink(supWa.number))}?text=${encodeURIComponent('استفسار عن الطلب #GL-' + o.id.slice(0, 6).toUpperCase())}">${icon('support')} تواصل مع الدعم بخصوص الطلب</a>` : ''}`;
 }
 
 // 12. الإشعارات
@@ -975,7 +865,7 @@ async function notificationsPage() {
   if (S.me) { S.me.unread = 0; updateChrome(); }
   if (!r.notifications.length) { view.innerHTML = emptyState('bell', 'ما فيش إشعارات', 'هنا بتلقى تحديثات طلباتك وإيداعاتك', '<a class="btn btn-ghost btn-sm" href="#/home">الرئيسية</a>'); return; }
   const ic = { order: 'receipt', deposit: 'wallet', admin: 'bell', info: 'bell' };
-  view.innerHTML = '<div class="reveal">' + r.notifications.map((n) => {
+  view.innerHTML = '<div class="rows reveal" style="margin-top:8px">' + r.notifications.map((n) => {
     const inner = `<span class="n-ico">${icon(ic[n.type] || 'bell')}</span><div style="min-width:0"><b>${esc(n.title)}</b><p>${esc(n.body)}</p><small>${timeAgo(n.createdAt)}</small></div>`;
     return n.type === 'order' && n.ref ? `<a class="n-card ${n.unread ? 'unread' : ''}" style="color:inherit" href="#/order/${encodeURIComponent(n.ref)}">${inner}</a>` : `<div class="n-card ${n.unread ? 'unread' : ''}">${inner}</div>`;
   }).join('') + '</div>';
@@ -986,7 +876,7 @@ async function supportPage() {
   setTop('inner', 'الدعم والتواصل');
   try { await loadConfig(); } catch (e) { view.innerHTML = errorState(e.message); return; }
   const block = supportBlock();
-  view.innerHTML = `<p class="page-sub">تواصل معنا في أي وقت نرد عليك في أسرع وقت.</p>${block || emptyState('support', 'ما فيش أرقام دعم مضافة بعد')}${footer()}`;
+  view.innerHTML = `<p class="page-sub">تواصل معنا في أي وقت ونرد عليك في أسرع وقت</p>${block || emptyState('support', 'ما فيش أرقام دعم مضافة بعد')}${footer()}`;
 }
 
 // 15. الصيانة
@@ -1041,8 +931,8 @@ async function render() {
   S.navCount++;
   S.timers.forEach(clearInterval); S.timers = [];
   S.actions = {};
-  closeSheet(); closeDrawer();
-  document.body.classList.remove('bare', 'home', 'game');
+  closeSheet();
+  document.body.classList.remove('bare', 'game');
   const { path, q } = parseHash();
   try { await loadConfig(); } catch {}
   if (S.cfg?.settings?.maintenance && !S.me?.admin) { maintenancePage(); return; }
@@ -1058,17 +948,24 @@ async function render() {
 window.addEventListener('hashchange', render);
 
 /* ================= Boot ================= */
+// شاشة البداية: تختفي بعد ما الصفحة الأولى تجهز (أول زيارة حد أدنى 2.3 ثانية عشان الحركة تكتمل)
+function hideSplash() {
+  const sp = $('#splash');
+  if (!sp) return;
+  const min = document.documentElement.classList.contains('sp-quick') ? 350 : 2300;
+  const wait = Math.max(0, min - (Date.now() - (window.__glSplashStart || 0)));
+  setTimeout(() => { sp.classList.add('out'); setTimeout(() => sp.remove(), 500); }, wait);
+}
 onAuthStateChanged(auth, async (u) => {
   const changed = (S.user?.uid || null) !== (u?.uid || null);
   S.user = u;
-  if (u) await loadMe(); else S.me = null;
+  if (u) await loadMe(true); else S.me = null;
   if (!S.authReady) {
-    S.authReady = true; $('#boot')?.remove(); render();
-    const sp = $('#splash');
-    if (sp) {
-      const wait = Math.max(0, 2300 - (Date.now() - (window.__glSplashStart || 0)));
-      setTimeout(() => { sp.classList.add('out'); setTimeout(() => sp.remove(), 550); }, document.documentElement.classList.contains('no-splash') ? 0 : wait);
-    }
+    S.authReady = true;
+    const t = Promise.race([render(), new Promise((r) => setTimeout(r, 5000))]);
+    await t;
+    $('#boot')?.remove();
+    hideSplash();
   }
   else if (changed) render();
 });

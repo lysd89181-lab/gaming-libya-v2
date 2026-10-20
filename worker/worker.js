@@ -431,7 +431,7 @@ async function fsQuery(env, coll, opts = {}) {
   const res = await fsReq(env, 'POST', `${parent}:runQuery`, body);
   return res.filter((x) => x.document).map((x) => decDoc(x.document));
 }
-async function fsAgg(env, coll, where, aggs) {
+async function fsAgg(env, coll, where, aggs, parent) {
   await sa(env);
   const body = {
     structuredAggregationQuery: {
@@ -439,7 +439,7 @@ async function fsAgg(env, coll, where, aggs) {
       aggregations: Object.entries(aggs).map(([alias, [t, f]]) => (t === 'count' ? { alias, count: {} } : { alias, sum: { field: { fieldPath: f } } })),
     },
   };
-  const res = await fsReq(env, 'POST', `${fsPaths(env).root}:runAggregationQuery`, body);
+  const res = await fsReq(env, 'POST', `${fsPaths(env).root}${parent ? '/' + parent : ''}:runAggregationQuery`, body);
   const fields = res.find((x) => x.result)?.result?.aggregateFields || {};
   const out = {};
   for (const k of Object.keys(aggs)) out[k] = num(decVal(fields[k]));
@@ -539,11 +539,36 @@ async function buildCatalog(env) {
   services.forEach((s) => delete s.active);
   return { categories, services, at: Date.now() };
 }
-// كاش بطبقتين: ذاكرة النسخة (يشتغل دائماً) + كاش الحافة (يشتغل على الدومينات الخاصة)
+// كاش بطبقتين: ذاكرة النسخة + كاش الحافة
+// الكتالوج والإعدادات ما ينبنوش من Firestore إلا لما الأدمن يعدّل (رقم نسخة في settings/cache)
+// فحص النسخة = قراءة وحدة كل دقيقة بدل قراءة كل الأقسام والخدمات كل 30 ثانية
 const MEM = new Map();
-async function purgeCache() {
+const VER_CHECK_MS = 60 * 1000;
+const HARD_TTL_MS = 30 * 60 * 1000;
+async function cacheVersion(env) {
+  const m = MEM.get('__ver');
+  if (m && Date.now() - m.at < VER_CHECK_MS) return m.v;
+  let v = m ? m.v : 0;
+  try { const d = await fsGet(env, 'meta/cache'); v = d ? num(d.v) : 0; } catch {}
+  MEM.set('__ver', { v, at: Date.now() });
+  return v;
+}
+async function purgeCache(env) {
   MEM.delete(CATALOG_KEY); MEM.delete(CONFIG_KEY);
   try { await caches.default.delete(CATALOG_KEY); await caches.default.delete(CONFIG_KEY); } catch {}
+  if (env) {
+    const v = Date.now();
+    try { await fsCommit(env, [wUpdate(env, 'meta/cache', { v }, { replace: true })]); } catch {}
+    MEM.set('__ver', { v, at: Date.now() });
+  }
+}
+async function versioned(env, key, build) {
+  const v = await cacheVersion(env);
+  const m = MEM.get(key);
+  if (m && m.v === v && Date.now() - m.at < HARD_TTL_MS) return m.data;
+  const data = await build();
+  MEM.set(key, { data, v, at: Date.now() });
+  return data;
 }
 async function cached(key, ttl, build) {
   const m = MEM.get(key);
@@ -720,12 +745,13 @@ function pubUser(u, uid) {
   };
 }
 async function unreadCount(env, uid, readAt) {
-  const since = tsMs(readAt);
+  const since = new Date(tsMs(readAt) || 0);
+  const w = [['createdAt', '>', since]];
   const [mine, all] = await Promise.all([
-    fsQuery(env, 'notifications', { parent: `users/${uid}`, orderBy: [['createdAt', 'desc']], limit: 30, select: ['createdAt'] }),
-    fsQuery(env, 'broadcasts', { orderBy: [['createdAt', 'desc']], limit: 30, select: ['createdAt'] }),
+    fsAgg(env, 'notifications', w, { c: ['count'] }, `users/${uid}`).catch(() => ({ c: 0 })),
+    fsAgg(env, 'broadcasts', w, { c: ['count'] }).catch(() => ({ c: 0 })),
   ]);
-  return [...mine, ...all].filter((n) => tsMs(n.createdAt) > since).length;
+  return Math.min(99, mine.c + all.c);
 }
 
 async function handleMe(env, uid) {
@@ -785,6 +811,7 @@ async function handleCreateOrder(env, uid, body, ctx) {
   const serviceIds = [...new Set(items.map((i) => str(i.serviceId, { min: 1, max: 64, field: 'الخدمة' })))];
   if (serviceIds.some((id) => !/^[\w-]+$/.test(id))) throw bad('خدمة غير صالحة');
 
+  let soldOut = false;
   const result = await fsTx(env, async (tx) => {
     const idemPath = `idem/${uid}_${idem}`;
     const [user, idemDoc, ...svcDocs] = await fsGetMany(env, [`users/${uid}`, idemPath, ...serviceIds.map((id) => `services/${id}`)], tx);
@@ -841,6 +868,7 @@ async function handleCreateOrder(env, uid, body, ctx) {
       }));
       for (const c of codes) writes.push(wUpdate(env, `stock/${c.id}`, { status: 'sold', orderId: oid, soldTo: uid, soldAt: SERVER_TIME }, { exists: true }));
       writes.push(wUpdate(env, `services/${l.sid}`, { soldCount: new Inc(l.qty), ...(auto ? { stockAvailable: new Inc(-l.qty) } : {}) }));
+      if (auto && int(l.svc.stockAvailable) - l.qty <= 0) soldOut = true;
       if (auto) writes.push(wNotify(env, uid, 'تم تسليم طلبك', `${l.p.title} — الكود جاهز في طلباتي`, 'order', oid));
       orders.push({ id: oid, title: l.p.title, total: l.total, status: auto ? 'completed' : 'pending', auto });
     }
@@ -852,6 +880,7 @@ async function handleCreateOrder(env, uid, body, ctx) {
     return { writes, result };
   });
 
+  if (soldOut) ctx.waitUntil(purgeCache(env));
   if (!result.duplicate) {
     const manual = result.orders.filter((o) => !o.auto);
     if (manual.length) ctx.waitUntil(pushAdmins(env, { title: 'طلب جديد', body: manual.map((o) => `${o.title} — ${o.total.toFixed(2)} د.ل`).join('\n') }));
@@ -956,8 +985,8 @@ async function handleNotifications(env, uid) {
   const u = await requireProfile(env, uid);
   const since = tsMs(u.notifReadAt);
   const [mine, all] = await Promise.all([
-    fsQuery(env, 'notifications', { parent: `users/${uid}`, orderBy: [['createdAt', 'desc']], limit: 60 }),
-    fsQuery(env, 'broadcasts', { orderBy: [['createdAt', 'desc']], limit: 30 }),
+    fsQuery(env, 'notifications', { parent: `users/${uid}`, orderBy: [['createdAt', 'desc']], limit: 30 }),
+    fsQuery(env, 'broadcasts', { orderBy: [['createdAt', 'desc']], limit: 15 }),
   ]);
   const list = [...mine, ...all]
     .map((n) => ({ id: n.id, title: n.title || '', body: n.body || '', type: n.type || 'info', ref: n.ref || '', createdAt: n.createdAt, unread: tsMs(n.createdAt) > since }))
@@ -979,8 +1008,19 @@ function wAdminLog(env, adminUid, action, ref, data = {}) {
   return wCreate(env, `admin_logs/${randId()}`, { uid: adminUid, action, ref, data, createdAt: SERVER_TIME });
 }
 
-async function handleStats(env) {
-  return cached('https://gl-cache.internal/stats-v3', 60, async () => {
+// عدّادات خفيفة للوحة التحكم: قراءتين بس بدل حساب الإحصائيات كاملة
+async function handleBadges(env) {
+  return cached('https://gl-cache.internal/badges-v1', 30, async () => {
+    const [o, d] = await Promise.all([
+      fsAgg(env, 'orders', [['status', '==', 'pending']], { c: ['count'] }).catch(() => ({ c: 0 })),
+      fsAgg(env, 'deposits', [['status', '==', 'pending']], { c: ['count'] }).catch(() => ({ c: 0 })),
+    ]);
+    return { pendingOrders: o.c, pendingDeposits: d.c };
+  });
+}
+async function handleStats(env, fresh) {
+  if (fresh) MEM.delete('https://gl-cache.internal/stats-v3');
+  return cached('https://gl-cache.internal/stats-v3', 300, async () => {
     const since = new Date(Date.now() - 30 * 864e5);
     // كل جزء يُحسب لوحده: لو جزء فشل، الباقي يظهر عادي مع تنبيه
     const parts = [
@@ -1053,12 +1093,13 @@ async function handleAdminOrders(env, url) {
   const status = url.searchParams.get('status') || 'all';
   let list;
   if (status === 'pending') list = await fsQuery(env, 'orders', { where: [['status', '==', 'pending']], limit: 1000 });
-  else list = await fsQuery(env, 'orders', { orderBy: [['createdAt', 'desc']], limit: 400 });
+  else list = await fsQuery(env, 'orders', { orderBy: [['createdAt', 'desc']], limit: 150 });
   if (status !== 'all' && status !== 'pending') list = list.filter((o) => o.status === status);
   list.sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
   return { orders: list.slice(0, 400).map((o) => ({ ...pubOrder(o), userId: o.userId || '', userName: o.userName || '', userEmail: o.userEmail || '' })) };
 }
 async function handleOrderComplete(env, admin, id, body, ctx) {
+  MEM.delete('https://gl-cache.internal/badges-v1');
   const note = str(body.note, { max: 300, field: 'الملاحظة' });
   const delivery = str(body.delivery, { max: 2000, field: 'بيانات التسليم' });
   const encd = delivery ? await encSecret(env, delivery) : null;
@@ -1076,6 +1117,7 @@ async function handleOrderComplete(env, admin, id, body, ctx) {
   return { ok: true };
 }
 async function handleOrderReject(env, admin, id, body, ctx) {
+  MEM.delete('https://gl-cache.internal/badges-v1');
   const reason = str(body.reason, { max: 300, field: 'سبب الرفض' });
   const o = await fsTx(env, async (tx) => {
     const o = await fsGet(env, `orders/${id}`, tx);
@@ -1110,7 +1152,7 @@ async function handleAdminDeposits(env, url) {
   const status = url.searchParams.get('status') || 'pending';
   let list;
   if (status === 'pending') list = await fsQuery(env, 'deposits', { where: [['status', '==', 'pending']], limit: 1000 });
-  else list = await fsQuery(env, 'deposits', { orderBy: [['createdAt', 'desc']], limit: 400 });
+  else list = await fsQuery(env, 'deposits', { orderBy: [['createdAt', 'desc']], limit: 150 });
   if (status !== 'all' && status !== 'pending') list = list.filter((d) => d.status === status);
   list.sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
   return { deposits: list.slice(0, 400).map((d) => pubDeposit(d, true)) };
@@ -1123,6 +1165,7 @@ async function handleDepositSecret(env, admin, id) {
   return { code: code || '' };
 }
 async function handleDepositApprove(env, admin, id, body, ctx) {
+  MEM.delete('https://gl-cache.internal/badges-v1');
   const override = body.amount !== undefined && body.amount !== null && body.amount !== '' ? money(body.amount, { min: 0.001, max: 100000 }) : null;
   const d = await fsTx(env, async (tx) => {
     const d = await fsGet(env, `deposits/${id}`, tx);
@@ -1148,6 +1191,7 @@ async function handleDepositApprove(env, admin, id, body, ctx) {
   return { ok: true };
 }
 async function handleDepositReject(env, admin, id, body, ctx) {
+  MEM.delete('https://gl-cache.internal/badges-v1');
   const reason = str(body.reason, { max: 300, field: 'سبب الرفض' });
   const d = await fsTx(env, async (tx) => {
     const d = await fsGet(env, `deposits/${id}`, tx);
@@ -1173,6 +1217,15 @@ async function handleAdminCatalog(env) {
     services: svcs.map((s) => ({ ...pubService(s), autoDelivery: !!s.autoDelivery, stockAvailable: int(s.stockAvailable) })).sort((a, b) => a.order - b.order),
   };
 }
+// تبديل سريع من القائمة: إظهار/إخفاء قسم أو تفعيل/تعطيل خدمة (حقل واحد فقط)
+async function handleToggle(env, admin, coll, id, body) {
+  if (!/^[\w-]+$/.test(id)) throw bad('معرّف غير صالح');
+  const on = bool(body.on);
+  const field = coll === 'categories' ? { hidden: !on } : { status: on };
+  await fsCommit(env, [wUpdate(env, `${coll}/${id}`, field, { exists: true }), wAdminLog(env, admin.uid, `${coll === 'categories' ? 'category' : 'service'}.toggle`, id)]);
+  await purgeCache(env);
+  return { ok: true, on };
+}
 async function handleSaveCategory(env, admin, body) {
   const data = {
     name: str(body.name, { min: 1, max: 40, field: 'اسم القسم' }),
@@ -1185,14 +1238,14 @@ async function handleSaveCategory(env, admin, body) {
   if (id && !/^[\w-]+$/.test(id)) throw bad('معرّف غير صالح');
   if (id) await fsCommit(env, [wUpdate(env, `categories/${id}`, data, { exists: true }), wAdminLog(env, admin.uid, 'category.update', id)]);
   else { id = randId(); await fsCommit(env, [wCreate(env, `categories/${id}`, { ...data, createdAt: SERVER_TIME }), wAdminLog(env, admin.uid, 'category.create', id)]); }
-  await purgeCache();
+  await purgeCache(env);
   return { id };
 }
 async function handleDeleteCategory(env, admin, id) {
   const svcs = await fsQuery(env, 'services', { where: [['category', '==', id]], limit: 1, select: ['category'] });
   if (svcs.length) throw bad('القسم يحتوي على خدمات، انقلها أو احذفها أولاً');
   await fsCommit(env, [wDelete(env, `categories/${id}`), wAdminLog(env, admin.uid, 'category.delete', id)]);
-  await purgeCache();
+  await purgeCache(env);
   return { ok: true };
 }
 async function handleSaveService(env, admin, body) {
@@ -1225,14 +1278,14 @@ async function handleSaveService(env, admin, body) {
     id = randId();
     await fsCommit(env, [wCreate(env, `services/${id}`, { ...data, stockAvailable: 0, soldCount: 0, createdAt: SERVER_TIME }), wAdminLog(env, admin.uid, 'service.create', id)]);
   }
-  await purgeCache();
+  await purgeCache(env);
   return { id };
 }
 async function handleDeleteService(env, admin, id) {
   const avail = await fsQuery(env, 'stock', { where: [['serviceId', '==', id], ['status', '==', 'available']], limit: 1, select: ['status'] });
   if (avail.length) throw bad('الخدمة فيها أكواد متاحة، احذف الأكواد أولاً');
   await fsCommit(env, [wDelete(env, `services/${id}`), wAdminLog(env, admin.uid, 'service.delete', id)]);
-  await purgeCache();
+  await purgeCache(env);
   return { ok: true };
 }
 async function handleStockList(env, id) {
@@ -1266,7 +1319,7 @@ async function handleStockAdd(env, admin, id, body) {
     writes.push(wUpdate(env, `services/${id}`, { stockAvailable: new Inc(added) }, { exists: true }));
     writes.push(wAdminLog(env, admin.uid, 'stock.add', id, { added }));
     await fsCommit(env, writes);
-    await purgeCache();
+    await purgeCache(env);
   }
   return { added, duplicates: codes.length - added };
 }
@@ -1278,7 +1331,7 @@ async function handleStockDelete(env, admin, codeId) {
     if (c.status !== 'available') throw bad('لا يمكن حذف كود مباع');
     return { writes: [wDelete(env, `stock/${codeId}`), wUpdate(env, `services/${c.serviceId}`, { stockAvailable: new Inc(-1) }), wAdminLog(env, admin.uid, 'stock.delete', codeId)] };
   });
-  await purgeCache();
+  await purgeCache(env);
   return { ok: true };
 }
 
@@ -1328,7 +1381,7 @@ async function serveImage(env, id, req, ctx) {
 
 async function handleAdminUsers(env, url) {
   const q = (url.searchParams.get('q') || '').trim().toLowerCase().slice(0, 60);
-  const users = await cached('https://gl-cache.internal/users-v3', 30, async () =>
+  const users = await cached('https://gl-cache.internal/users-v3', 120, async () =>
     (await fsQuery(env, 'users', { limit: 5000, select: ['name', 'username', 'phone', 'email', 'balance', 'createdAt', 'blocked'] }))
       .map((u) => ({ uid: u.id, name: u.name || u.username || '', phone: u.phone || '', email: u.email || '', balance: round3(num(u.balance)), createdAt: u.createdAt || null, blocked: u.blocked === true })));
   let list = users;
@@ -1460,7 +1513,7 @@ async function handleSaveSettings(env, admin, body) {
     };
   }
   await fsCommit(env, [wUpdate(env, 'settings/site', s, { replace: true }), wAdminLog(env, admin.uid, 'settings.update', 'site')]);
-  await purgeCache();
+  await purgeCache(env);
   return { settings: s };
 }
 
@@ -1495,11 +1548,11 @@ const routes = [];
 const route = (method, pattern, handler) => routes.push({ method, re: new RegExp(`^${pattern}$`), handler });
 
 route('GET', '/api/health', async () => ({ ok: true }));
-route('GET', '/api/config', async ({ env }) => cached(CONFIG_KEY, 30, async () => {
+route('GET', '/api/config', async ({ env }) => versioned(env, CONFIG_KEY, async () => {
   const s = await getSettings(env);
   return { turnstileSiteKey: env.TURNSTILE_SITE_KEY || '', vapidKey: env.FCM_VAPID_PUBLIC_KEY || '', settings: s };
 }));
-route('GET', '/api/catalog', async ({ env }) => cached(CATALOG_KEY, 30, () => buildCatalog(env)));
+route('GET', '/api/catalog', async ({ env }) => versioned(env, CATALOG_KEY, () => buildCatalog(env)));
 route('POST', '/api/auth/signup', ({ req, env, body, ip }) => handleSignup(req, env, body, ip));
 route('POST', '/api/auth/login', ({ req, env, body, ip }) => handleLogin(req, env, body, ip));
 
@@ -1527,7 +1580,10 @@ const A = (fn) => async (c) => {
   }
 };
 route('GET', '/api/admin/me', A(async ({ admin }) => ({ uid: admin.uid, email: admin.email })));
-route('GET', '/api/admin/stats', A(({ env }) => handleStats(env)));
+route('GET', '/api/admin/stats', A(({ env, url }) => handleStats(env, url.searchParams.get('fresh') === '1')));
+route('GET', '/api/admin/badges', A(({ env }) => handleBadges(env)));
+route('POST', '/api/admin/categories/([\\w-]+)/toggle', A(({ env, admin, m, body }) => handleToggle(env, admin, 'categories', m[1], body)));
+route('POST', '/api/admin/services/([\\w-]+)/toggle', A(({ env, admin, m, body }) => handleToggle(env, admin, 'services', m[1], body)));
 route('GET', '/api/admin/orders', A(({ env, url }) => handleAdminOrders(env, url)));
 route('GET', '/api/admin/orders/([\\w-]+)', A(({ env, admin, m }) => handleOrderDetail(env, admin.uid, m[1], true)));
 route('POST', '/api/admin/orders/([\\w-]+)/complete', A(({ env, admin, m, body, ctx }) => handleOrderComplete(env, admin, m[1], body, ctx)));
