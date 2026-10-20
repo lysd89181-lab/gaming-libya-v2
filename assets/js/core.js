@@ -4,8 +4,8 @@ import {
   setPersistence, browserLocalPersistence, browserSessionPersistence,
   reauthenticateWithCredential, EmailAuthProvider, updatePassword,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { CONFIG } from './config.js?v=202610200548';
-import { icon } from './icons.js?v=202610200548';
+import { CONFIG } from './config.js?v=202610201150';
+import { icon } from './icons.js?v=202610201150';
 
 export { CONFIG };
 export const app = initializeApp(CONFIG.firebase);
