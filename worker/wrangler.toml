@@ -1,0 +1,6 @@
+# ربط الـ Worker بالريبو (Cloudflare Workers Builds — Root directory: worker)
+name = "gaming-libya-api"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+# يحافظ على المتغيرات النصية اللي حطيتها من لوحة Cloudflare
+keep_vars = true
