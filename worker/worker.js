@@ -31,17 +31,20 @@ const DEFAULT_SETTINGS = {
   depositMax: 5000,
   supportWhatsapp: '',
   social: { facebook: '', instagram: '', telegram: '', whatsapp: '', tiktok: '' },
+  support: { phones: [], channels: [] },
   payments: {
-    libyana: { enabled: true, label: 'ليبيانا', number: '0946730213', note: 'حوّل الرصيد للرقم ثم أرسل الطلب' },
-    madar: { enabled: true, label: 'مدار', number: '0915307725', note: 'حوّل الرصيد للرقم ثم أرسل الطلب' },
-    cards: { enabled: true, label: 'كروت شحن', number: '', note: 'أدخل رقم الكرت وقيمته' },
-    onepay: { enabled: true, label: 'ون باي OnePay', number: 'LY82005101101017366700013', note: 'حوّل المبلغ ثم أدخل اسم المحوّل' },
-    lypay: { enabled: true, label: 'لي باي LYPAY', number: '101017366700013', note: 'حوّل المبلغ ثم أدخل اسم المحوّل' },
-    crypto: { enabled: true, label: 'كريبتو USDT', number: '', note: 'Binance / Bybit Pay' },
+    libyana: { enabled: true, label: 'ليبيانا', number: '0946730213', note: 'حوّل الرصيد للرقم ثم أرسل الطلب', image: '' },
+    madar: { enabled: true, label: 'مدار', number: '0915307725', note: 'حوّل الرصيد للرقم ثم أرسل الطلب', image: '' },
+    cards: { enabled: true, label: 'كروت شحن', number: '', note: 'أدخل رقم الكرت وقيمته', image: '' },
+    onepay: { enabled: true, label: 'ون باي OnePay', number: 'LY82005101101017366700013', note: 'حوّل المبلغ ثم أدخل اسم المحوّل', image: '' },
+    lypay: { enabled: true, label: 'لي باي LYPAY', number: '101017366700013', note: 'حوّل المبلغ ثم أدخل اسم المحوّل', image: '' },
+    crypto: { enabled: true, label: 'كريبتو USDT', number: '', note: 'Binance / Bybit Pay', image: '' },
   },
 };
 const PAYMENT_KEYS = Object.keys(DEFAULT_SETTINGS.payments);
 const FIELD_TYPES = ['id', 'phone', 'account', 'custom'];
+const CTA_TYPES = ['none', 'url', 'page', 'whatsapp', 'tiktok', 'phone'];
+const CHANNEL_TYPES = ['whatsapp', 'whatsapp_channel', 'telegram', 'tiktok', 'instagram', 'facebook', 'youtube', 'snapchat', 'website'];
 
 /* ============================== أدوات عامة ============================== */
 
@@ -111,6 +114,25 @@ function imageUrl(v) {
   throw bad('رابط الصورة غير صالح');
 }
 
+function phoneDigits(v, field = 'الرقم') {
+  const raw = str(v, { max: 20, field });
+  if (!raw) return '';
+  const d = raw.replace(/[^\d+]/g, '');
+  if (!/^\+?\d{6,15}$/.test(d)) throw bad(`${field} غير صحيح`);
+  return d;
+}
+function ctaValue(type, v) {
+  if (type === 'none') return '';
+  const val = str(v, { min: 1, max: 300, field: 'رابط الزر' });
+  if (type === 'url') { if (!/^https:\/\/[^\s"'<>]+$/.test(val)) throw bad('رابط الزر يجب أن يبدأ بـ https://'); return val; }
+  if (type === 'page') { if (!/^#\/[\w\-\/?=&.%]*$/.test(val)) throw bad('صفحة المتجر يجب أن تبدأ بـ #/'); return val; }
+  if (type === 'tiktok') {
+    if (/^https:\/\/([\w-]+\.)?tiktok\.com\/[^\s"'<>]*$/.test(val)) return val;
+    if (/^@?[\w.]{2,30}$/.test(val)) return 'https://www.tiktok.com/@' + val.replace(/^@/, '');
+    throw bad('حساب تيك توك غير صحيح');
+  }
+  return phoneDigits(val, type === 'whatsapp' ? 'رقم الواتساب' : 'رقم الهاتف');
+}
 function normPhone(p) {
   let d = String(p || '').replace(/[^\d]/g, '');
   if (d.startsWith('00218')) d = d.slice(5);
@@ -457,6 +479,10 @@ function mergeSettings(stored) {
   }
   if (Array.isArray(stored.banners)) s.banners = stored.banners;
   if (stored.social && typeof stored.social === 'object') Object.assign(s.social, stored.social);
+  if (stored.support && typeof stored.support === 'object') {
+    if (Array.isArray(stored.support.phones)) s.support.phones = stored.support.phones;
+    if (Array.isArray(stored.support.channels)) s.support.channels = stored.support.channels;
+  }
   if (stored.payments && typeof stored.payments === 'object') {
     for (const k of PAYMENT_KEYS) if (stored.payments[k]) Object.assign(s.payments[k], stored.payments[k]);
   }
@@ -814,7 +840,7 @@ async function handleCreateOrder(env, uid, body, ctx) {
       }));
       for (const c of codes) writes.push(wUpdate(env, `stock/${c.id}`, { status: 'sold', orderId: oid, soldTo: uid, soldAt: SERVER_TIME }, { exists: true }));
       writes.push(wUpdate(env, `services/${l.sid}`, { soldCount: new Inc(l.qty), ...(auto ? { stockAvailable: new Inc(-l.qty) } : {}) }));
-      if (auto) writes.push(wNotify(env, uid, 'تم تسليم طلبك ✅', `${l.p.title} — الكود جاهز في طلباتي`, 'order', oid));
+      if (auto) writes.push(wNotify(env, uid, 'تم تسليم طلبك', `${l.p.title} — الكود جاهز في طلباتي`, 'order', oid));
       orders.push({ id: oid, title: l.p.title, total: l.total, status: auto ? 'completed' : 'pending', auto });
     }
     const newBal = round3(balance - total);
@@ -827,8 +853,8 @@ async function handleCreateOrder(env, uid, body, ctx) {
 
   if (!result.duplicate) {
     const manual = result.orders.filter((o) => !o.auto);
-    if (manual.length) ctx.waitUntil(pushAdmins(env, { title: '📦 طلب جديد', body: manual.map((o) => `${o.title} — ${o.total.toFixed(2)} د.ل`).join('\n') }));
-    if (result.orders.some((o) => o.auto)) ctx.waitUntil(pushUser(env, uid, { title: 'تم تسليم طلبك ✅', body: 'الكود جاهز في صفحة طلباتي' }));
+    if (manual.length) ctx.waitUntil(pushAdmins(env, { title: 'طلب جديد', body: manual.map((o) => `${o.title} — ${o.total.toFixed(2)} د.ل`).join('\n') }));
+    if (result.orders.some((o) => o.auto)) ctx.waitUntil(pushUser(env, uid, { title: 'تم تسليم طلبك', body: 'الكود جاهز في صفحة طلباتي' }));
   }
   return result;
 }
@@ -905,7 +931,7 @@ async function handleCreateDeposit(env, uid, body, ctx) {
   doc.userPhone = doc.userPhone || user.phone || '';
   const id = randId();
   await fsCommit(env, [wCreate(env, `deposits/${id}`, doc)]);
-  ctx.waitUntil(pushAdmins(env, { title: '💰 طلب إيداع جديد', body: `${doc.provider} — ${doc.amount.v.toFixed(2)} د.ل — ${doc.userName}` }));
+  ctx.waitUntil(pushAdmins(env, { title: 'طلب إيداع جديد', body: `${doc.provider} — ${doc.amount.v.toFixed(2)} د.ل — ${doc.userName}` }));
   return { id, amount: doc.amount.v };
 }
 function pubDeposit(d, admin = false) {
@@ -1042,10 +1068,10 @@ async function handleOrderComplete(env, admin, id, body, ctx) {
     const upd = { status: 'completed', completedAt: SERVER_TIME, processedBy: admin.uid, deliveryNote: note };
     if (encd) upd.codes = [...(o.codes || []), encd];
     const writes = [wUpdate(env, `orders/${id}`, upd, { exists: true }), wAdminLog(env, admin.uid, 'order.complete', id)];
-    if (o.userId) writes.push(wNotify(env, o.userId, 'تم تنفيذ طلبك ✅', `${o.serviceTitle || 'طلبك'}${note ? ' — ' + note : ''}`, 'order', id));
+    if (o.userId) writes.push(wNotify(env, o.userId, 'تم تنفيذ طلبك', `${o.serviceTitle || 'طلبك'}${note ? ' — ' + note : ''}`, 'order', id));
     return { writes, result: o };
   });
-  if (o.userId) ctx.waitUntil(pushUser(env, o.userId, { title: 'تم تنفيذ طلبك ✅', body: o.serviceTitle || '' }));
+  if (o.userId) ctx.waitUntil(pushUser(env, o.userId, { title: 'تم تنفيذ طلبك', body: o.serviceTitle || '' }));
   return { ok: true };
 }
 async function handleOrderReject(env, admin, id, body, ctx) {
@@ -1111,13 +1137,13 @@ async function handleDepositApprove(env, admin, id, body, ctx) {
         wUpdate(env, `deposits/${id}`, { status: 'approved', approvedAmount: new Dbl(amount), processedAt: SERVER_TIME, processedBy: admin.uid }, { exists: true }),
         wUpdate(env, `users/${d.userId}`, { balance: new Inc(amount) }, { exists: true }),
         wCreate(env, `wallet_logs/${randId()}`, { uid: d.userId, delta: new Dbl(amount), balanceAfter: new Dbl(after), reason: 'deposit', ref: id, createdAt: SERVER_TIME }),
-        wNotify(env, d.userId, 'تمت إضافة رصيد 💰', `تم إيداع ${amount.toFixed(2)} د.ل في محفظتك`, 'deposit', id),
+        wNotify(env, d.userId, 'تمت إضافة رصيد', `تم إيداع ${amount.toFixed(2)} د.ل في محفظتك`, 'deposit', id),
         wAdminLog(env, admin.uid, 'deposit.approve', id, { amount }),
       ],
       result: { ...d, amount },
     };
   });
-  ctx.waitUntil(pushUser(env, d.userId, { title: 'تمت إضافة رصيد 💰', body: `${d.amount.toFixed(2)} د.ل` }));
+  ctx.waitUntil(pushUser(env, d.userId, { title: 'تمت إضافة رصيد', body: `${d.amount.toFixed(2)} د.ل` }));
   return { ok: true };
 }
 async function handleDepositReject(env, admin, id, body, ctx) {
@@ -1339,7 +1365,7 @@ async function handleAdjustBalance(env, admin, uid, body) {
       wCreate(env, `wallet_logs/${randId()}`, { uid, delta: new Dbl(delta), balanceAfter: new Dbl(after), reason: 'admin', note, by: admin.uid, createdAt: SERVER_TIME }),
       wAdminLog(env, admin.uid, 'user.balance', uid, { delta, note }),
     ];
-    if (delta > 0) writes.push(wNotify(env, uid, 'تمت إضافة رصيد 💰', `تمت إضافة ${delta.toFixed(2)} د.ل لمحفظتك${note ? ' — ' + note : ''}`, 'deposit'));
+    if (delta > 0) writes.push(wNotify(env, uid, 'تمت إضافة رصيد', `تمت إضافة ${delta.toFixed(2)} د.ل لمحفظتك${note ? ' — ' + note : ''}`, 'deposit'));
     return { writes, result: after };
   });
   return { balance: after };
@@ -1396,16 +1422,40 @@ async function handleSaveSettings(env, admin, body) {
         label: str(p.label, { min: 1, max: 40, field: 'اسم الطريقة' }),
         number: str(p.number, { max: 60, field: 'الرقم/الحساب' }),
         note: str(p.note, { max: 200, field: 'الملاحظة' }),
+        image: imageUrl(p.image),
       };
     }
   }
   if (Array.isArray(body.banners)) {
-    s.banners = body.banners.slice(0, 8).map((b) => ({
-      image: imageUrl(b.image),
-      title: str(b.title, { max: 60, field: 'عنوان البانر' }),
-      subtitle: str(b.subtitle, { max: 80, field: 'وصف البانر' }),
-      link: str(b.link, { max: 200, field: 'رابط البانر' }).replace(/[^\w#\/\-?=&.:%]/g, ''),
-    })).filter((b) => b.image);
+    s.banners = body.banners.slice(0, 8).map((b) => {
+      const ctaType = CTA_TYPES.includes(b.ctaType) ? b.ctaType : 'none';
+      return {
+        image: imageUrl(b.image),
+        title: str(b.title, { max: 60, field: 'عنوان البانر' }),
+        subtitle: str(b.subtitle, { max: 80, field: 'وصف البانر' }),
+        ctaType,
+        ctaLabel: str(b.ctaLabel, { max: 20, field: 'نص الزر' }),
+        ctaValue: ctaValue(ctaType, b.ctaValue),
+      };
+    }).filter((b) => b.image);
+  }
+  if (body.support && typeof body.support === 'object') {
+    const phones = Array.isArray(body.support.phones) ? body.support.phones.slice(0, 6) : [];
+    const channels = Array.isArray(body.support.channels) ? body.support.channels.slice(0, 10) : [];
+    s.support = {
+      phones: phones.map((p) => ({
+        label: str(p.label, { max: 30, field: 'اسم الرقم' }),
+        number: phoneDigits(p.number, 'رقم الدعم'),
+        whatsapp: bool(p.whatsapp),
+        call: bool(p.call),
+      })).filter((p) => p.number),
+      channels: channels.map((c) => {
+        const type = CHANNEL_TYPES.includes(c.type) ? c.type : 'website';
+        const url = str(c.url, { max: 300, field: 'رابط القناة' });
+        if (url && !/^https:\/\/[^\s"'<>]+$/.test(url)) throw bad('روابط القنوات يجب أن تبدأ بـ https://');
+        return { type, label: str(c.label, { max: 30, field: 'اسم القناة' }), url };
+      }).filter((c) => c.url),
+    };
   }
   await fsCommit(env, [wUpdate(env, 'settings/site', s, { replace: true }), wAdminLog(env, admin.uid, 'settings.update', 'site')]);
   await purgeCache();

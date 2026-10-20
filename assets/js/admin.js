@@ -55,11 +55,17 @@ function shell() {
       <div style="display:flex;justify-content:space-between;align-items:center">${brand('ADMIN')}</div>
       <nav class="nav" id="nav">${PAGES.map(([k, ic, t]) => `<button data-act="tab" data-k="${k}" class="${A.tab === k ? 'active' : ''}">${icon(ic)}<span>${t}</span><i class="nb hidden" data-nb="${k}"></i></button>`).join('')}</nav>
       <div class="side-user"><b>${icon('shield', 'ico-sm')} مدير النظام</b><span>${esc(A.user.email || A.user.uid)}</span>
+        <button class="btn btn-soft btn-sm" data-act="theme">${icon(document.documentElement.getAttribute('data-theme') === 'light' ? 'moon' : 'sun', 'ico-sm')} تبديل الوضع</button>
         <button class="btn btn-soft btn-sm" data-act="push">${icon('bell', 'ico-sm')} إشعارات الطلبات</button>
         <a class="btn btn-soft btn-sm" href="./" target="_blank" rel="noopener">${icon('home', 'ico-sm')} فتح المتجر</a>
         <button class="btn btn-danger btn-sm" data-act="logout">${icon('logout', 'ico-sm')} تسجيل الخروج</button></div>
     </aside><main class="adm-main" id="main"></main></div>`;
   A.actions.tab = (b) => { A.tab = b.dataset.k; store.set('gl_adm_tab', A.tab); closeSide(); renderTab(); };
+  A.actions.theme = () => {
+    const light = document.documentElement.getAttribute('data-theme') !== 'light';
+    if (light) document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem('gl_theme', light ? 'light' : 'dark'); } catch {}
+  };
   A.actions.logout = async () => { if (await confirmSheet({ title: 'تسجيل الخروج؟', ok: 'خروج', danger: true })) { await logout(); } };
   A.actions.push = async (b) => busy(b, async () => {
     try { A.cfg = A.cfg || await api('/api/config'); await enablePush(A.cfg.vapidKey, { admin: true }); toast('ستصلك إشعارات الطلبات والإيداعات الجديدة', 'ok', 4000); }
@@ -84,7 +90,7 @@ function top(title, tools = '') {
 }
 function renderTab() {
   A.timers.forEach(clearInterval); A.timers = [];
-  const keep = { tab: A.actions.tab, logout: A.actions.logout, push: A.actions.push, menu: A.actions.menu };
+  const keep = { tab: A.actions.tab, logout: A.actions.logout, push: A.actions.push, menu: A.actions.menu, theme: A.actions.theme };
   A.actions = keep;
   $$('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.k === A.tab));
   const fn = { dash, orders, deposits, categories, services, users, notify, settings }[A.tab] || dash;
@@ -472,47 +478,78 @@ async function settings() {
   loading('الإعدادات');
   const { settings: s } = await api('/api/admin/settings');
   const pmNames = { libyana: 'ليبيانا', madar: 'مدار', cards: 'كروت الشحن', onepay: 'ون باي', lypay: 'لي باي', crypto: 'كريبتو' };
+  const ctaOpts = [['none', 'بدون زر'], ['url', 'رابط موقع'], ['page', 'صفحة في المتجر'], ['whatsapp', 'واتساب'], ['tiktok', 'تيك توك'], ['phone', 'اتصال']];
+  const ctaPh = { none: '', url: 'https://example.com', page: '#/category/... أو #/offers', whatsapp: '0912345678', tiktok: '@اسم_الحساب أو رابط', phone: '0912345678' };
+  const chOpts = [['whatsapp', 'واتساب'], ['whatsapp_channel', 'قناة واتساب'], ['telegram', 'تيليقرام'], ['tiktok', 'تيك توك'], ['instagram', 'إنستقرام'], ['facebook', 'فيسبوك'], ['youtube', 'يوتيوب'], ['snapchat', 'سناب شات'], ['website', 'موقع']];
   const untilLocal = s.maintenanceUntil ? new Date(Date.parse(s.maintenanceUntil) + 2 * 3600e3).toISOString().slice(0, 16) : '';
-  const bannerRow = (b = {}, i) => `<div class="pm-card" data-banner="${i}">${uploader('b_image_' + i, b.image || '')}
-    <div class="form-grid cols"><input class="input" data-in="b_title_${i}" maxlength="60" placeholder="العنوان" value="${esc(b.title || '')}"><input class="input" data-in="b_subtitle_${i}" maxlength="80" placeholder="وصف قصير" value="${esc(b.subtitle || '')}">
-    <input class="input ltr full" data-in="b_link_${i}" maxlength="200" placeholder="#/category/... (اختياري)" value="${esc(b.link || '')}"></div>
-    <button class="btn btn-danger btn-xs" data-act="rmBanner" data-i="${i}">${icon('trash', 'ico-sm')} حذف البانر</button></div>`;
   let banners = [...(s.banners || [])];
-  $('#main').innerHTML = top('الإعدادات', `<button class="btn btn-primary btn-sm" data-act="save">${icon('check', 'ico-sm')} حفظ الكل</button>`) + `<div class="panels" id="sf">
-    <div class="panel"><h3>${icon('cone', 'ico-sm')} وضع الصيانة</h3><div class="form-grid">
-      <label class="toggle-row"><span><b>تفعيل وضع الصيانة</b><small>المتجر يعرض صفحة الصيانة ويوقف الطلبات والإيداعات</small></span><span class="switch"><input type="checkbox" data-in="maintenance" ${s.maintenance ? 'checked' : ''}></span></label>
-      <div class="field"><label>رسالة الصيانة</label><input class="input" data-in="maintenanceMsg" maxlength="300" value="${esc(s.maintenanceMsg)}"></div>
-      <div class="field"><label>وقت العودة المتوقع (توقيت ليبيا — اختياري للعد التنازلي)</label><input class="input ltr" type="datetime-local" data-in="maintenanceUntil" value="${untilLocal}"></div></div></div>
-    <div class="panel"><h3>${icon('sparkle', 'ico-sm')} الواجهة</h3><div class="form-grid">
-      <div class="field"><label>شريط إعلان (اختياري)</label><input class="input" data-in="announcement" maxlength="200" value="${esc(s.announcement)}" placeholder="مثال: التوصيل متاح 24 ساعة"></div>
-      <div class="field"><label>البانرات الرئيسية (حتى 8)</label><div class="form-grid" id="banners">${banners.map(bannerRow).join('')}</div>
-      <button class="btn btn-ghost btn-sm" data-act="addBanner" style="justify-self:start">${icon('plus', 'ico-sm')} إضافة بانر</button></div></div></div>
-    <div class="panel"><h3>${icon('wallet', 'ico-sm')} الإيداع وطرق الدفع</h3><div class="form-grid cols">
+  let phones = [...(s.support?.phones || [])];
+  let channels = [...(s.support?.channels || [])];
+  if (!phones.length && s.supportWhatsapp) phones.push({ label: 'الدعم الفني', number: s.supportWhatsapp, whatsapp: true, call: false });
+  if (!channels.length) for (const [k, v] of Object.entries(s.social || {})) if (v) channels.push({ type: k === 'whatsapp' ? 'whatsapp' : k, label: '', url: v });
+  const sel = (opts, v, attr) => `<select class="select" ${attr}>${opts.map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+  const bannerRow = (b, i) => `<div class="repeat-row" data-banner="${i}">${uploader('b_image_' + i, b.image || '')}
+    <div class="rr"><input class="input" data-b="title" maxlength="60" placeholder="العنوان (اختياري)" value="${esc(b.title || '')}"><input class="input" data-b="subtitle" maxlength="80" placeholder="وصف قصير (اختياري)" value="${esc(b.subtitle || '')}"></div>
+    <div class="rr">${sel(ctaOpts, b.ctaType || 'none', 'data-b="ctaType"')}<input class="input" data-b="ctaLabel" maxlength="20" placeholder="نص الزر (زيارة)" value="${esc(b.ctaLabel || '')}"></div>
+    <input class="input ltr" data-b="ctaValue" maxlength="300" placeholder="${esc(ctaPh[b.ctaType || 'none'] || '')}" value="${esc(b.ctaValue || '')}">
+    <button class="btn btn-danger btn-xs" style="justify-self:start" data-act="rmBanner" data-i="${i}">${icon('trash', 'ico-sm')} حذف البانر</button></div>`;
+  const phoneRow = (p, i) => `<div class="repeat-row" data-phone="${i}"><div class="rr"><input class="input" data-p="label" maxlength="30" placeholder="الاسم (مثال: الدعم الفني)" value="${esc(p.label || '')}"><input class="input ltr" data-p="number" maxlength="20" placeholder="0912345678" value="${esc(p.number || '')}"></div>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><label class="check"><input type="checkbox" data-p="whatsapp" ${p.whatsapp ? 'checked' : ''}> واتساب</label><label class="check"><input type="checkbox" data-p="call" ${p.call ? 'checked' : ''}> اتصال</label>
+    <button class="btn btn-danger btn-xs" style="margin-right:auto" data-act="rmPhone" data-i="${i}">${icon('trash', 'ico-sm')}</button></div></div>`;
+  const chRow = (c, i) => `<div class="repeat-row" data-ch="${i}"><div class="rr">${sel(chOpts, c.type || 'website', 'data-c="type"')}<input class="input" data-c="label" maxlength="30" placeholder="الاسم (اختياري)" value="${esc(c.label || '')}"></div>
+    <div style="display:flex;gap:8px"><input class="input ltr" data-c="url" maxlength="300" placeholder="https://..." value="${esc(c.url || '')}"><button class="btn btn-danger btn-xs" style="height:48px" data-act="rmCh" data-i="${i}">${icon('trash', 'ico-sm')}</button></div></div>`;
+  $('#main').innerHTML = top('الإعدادات', `<button class="btn btn-primary btn-sm" data-act="save">${icon('check', 'ico-sm')} حفظ</button>`) + `<div class="panels" id="sf">
+    <div class="panel"><h3>البانرات الإعلانية <small>حتى 8 — يتبدلوا تلقائياً ويتسحبوا باليد</small></h3><div class="form-grid" id="banners"></div>
+      <button class="btn btn-ghost btn-sm" data-act="addBanner" style="margin-top:12px">${icon('plus', 'ico-sm')} إضافة بانر</button></div>
+    <div class="panel"><h3>الدعم والتواصل</h3>
+      <div class="label" style="margin-bottom:8px">أرقام الدعم</div><div class="form-grid" id="phones"></div>
+      <button class="btn btn-ghost btn-sm" data-act="addPhone" style="margin-top:10px">${icon('plus', 'ico-sm')} إضافة رقم</button>
+      <div class="label" style="margin:18px 0 8px">القنوات والحسابات</div><div class="form-grid" id="channels"></div>
+      <button class="btn btn-ghost btn-sm" data-act="addCh" style="margin-top:10px">${icon('plus', 'ico-sm')} إضافة قناة</button></div>
+    <div class="panel"><h3>طرق الدفع</h3><div class="form-grid cols">
       <div class="field"><label>سعر الدولار (د.ل)</label><input class="input ltr" type="number" step="0.01" data-in="usdRate" value="${s.usdRate}"></div>
-      <div class="field"><label>رقم الدعم واتساب (218...)</label><input class="input ltr" data-in="supportWhatsapp" maxlength="20" value="${esc(s.supportWhatsapp)}" placeholder="2189XXXXXXXX"></div>
-      <div class="field"><label>أقل إيداع</label><input class="input ltr" type="number" step="0.5" data-in="depositMin" value="${s.depositMin}"></div>
-      <div class="field"><label>أعلى إيداع</label><input class="input ltr" type="number" step="1" data-in="depositMax" value="${s.depositMax}"></div></div>
+      <div class="field"><label>أقل إيداع / أعلى إيداع</label><div class="rr" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><input class="input ltr" type="number" step="0.5" data-in="depositMin" value="${s.depositMin}"><input class="input ltr" type="number" step="1" data-in="depositMax" value="${s.depositMax}"></div></div></div>
       <div class="form-grid cols" style="margin-top:14px">${Object.entries(s.payments).map(([k, p]) => `<div class="pm-card"><label class="toggle-row" style="padding:0;border:0;background:none"><b>${pmNames[k] || k}</b><span class="switch"><input type="checkbox" data-in="p_${k}_enabled" ${p.enabled ? 'checked' : ''}></span></label>
+        ${uploader(`p_${k}_image`, p.image || '')}
         <input class="input" data-in="p_${k}_label" maxlength="40" value="${esc(p.label)}" placeholder="الاسم الظاهر">
         <input class="input ltr" data-in="p_${k}_number" maxlength="60" value="${esc(p.number)}" placeholder="${k === 'cards' ? 'غير مطلوب' : 'الرقم / الحساب'}">
         <input class="input" data-in="p_${k}_note" maxlength="200" value="${esc(p.note)}" placeholder="ملاحظة للعميل"></div>`).join('')}</div></div>
-    <div class="panel"><h3>${icon('link', 'ico-sm')} روابط التواصل</h3><div class="form-grid cols">${Object.entries(s.social).map(([k, v]) => `<div class="field"><label>${k}</label><input class="input ltr" data-in="s_${k}" maxlength="200" value="${esc(v)}" placeholder="https://..."></div>`).join('')}</div></div></div>
+    <div class="panel"><h3>الواجهة والصيانة</h3><div class="form-grid">
+      <div class="field"><label>شريط إعلان (اختياري)</label><input class="input" data-in="announcement" maxlength="200" value="${esc(s.announcement)}" placeholder="مثال: الطلبات تتنفذ من 9 الصبح لين 2 الليل"></div>
+      <label class="toggle-row"><span><b>وضع الصيانة</b><small>المتجر يعرض صفحة الصيانة ويوقف الطلبات والإيداعات</small></span><span class="switch"><input type="checkbox" data-in="maintenance" ${s.maintenance ? 'checked' : ''}></span></label>
+      <div class="field"><label>رسالة الصيانة</label><input class="input" data-in="maintenanceMsg" maxlength="300" value="${esc(s.maintenanceMsg)}"></div>
+      <div class="field"><label>وقت العودة المتوقع (توقيت ليبيا — اختياري)</label><input class="input ltr" type="datetime-local" data-in="maintenanceUntil" value="${untilLocal}"></div></div></div></div>
     <button class="btn btn-primary btn-block" style="margin-top:16px" data-act="save">${icon('check')} حفظ الإعدادات</button>`;
-  bindUploaders($('#sf'));
-  const collectBanners = () => $$('[data-banner]').map((el) => { const i = el.dataset.banner; return { image: $(`[data-in="b_image_${i}"]`, el).value.trim(), title: $(`[data-in="b_title_${i}"]`, el).value.trim(), subtitle: $(`[data-in="b_subtitle_${i}"]`, el).value.trim(), link: $(`[data-in="b_link_${i}"]`, el).value.trim() }; });
-  const redrawBanners = () => { $('#banners').innerHTML = banners.map(bannerRow).join(''); bindUploaders($('#banners')); };
-  A.actions.addBanner = () => { banners = collectBanners(); if (banners.length >= 8) return toast('الحد 8 بانرات', 'bad'); banners.push({}); redrawBanners(); };
-  A.actions.rmBanner = (b) => { banners = collectBanners(); banners.splice(Number(b.dataset.i), 1); redrawBanners(); };
+  const collectBanners = () => $$('[data-banner]').map((el) => {
+    const v = (k) => $(`[data-b="${k}"]`, el).value.trim();
+    return { image: $(`[data-in="b_image_${el.dataset.banner}"]`, el).value.trim(), title: v('title'), subtitle: v('subtitle'), ctaType: v('ctaType'), ctaLabel: v('ctaLabel'), ctaValue: v('ctaValue') };
+  });
+  const collectPhones = () => $$('[data-phone]').map((el) => ({ label: $('[data-p="label"]', el).value.trim(), number: $('[data-p="number"]', el).value.trim(), whatsapp: $('[data-p="whatsapp"]', el).checked, call: $('[data-p="call"]', el).checked }));
+  const collectCh = () => $$('[data-ch]').map((el) => ({ type: $('[data-c="type"]', el).value, label: $('[data-c="label"]', el).value.trim(), url: $('[data-c="url"]', el).value.trim() }));
+  const drawB = () => {
+    $('#banners').innerHTML = banners.map(bannerRow).join('') || '<span class="muted">ما فيش بانرات — يظهر بانر نصي افتراضي</span>';
+    bindUploaders($('#banners'));
+    $$('[data-b="ctaType"]').forEach((sl) => sl.addEventListener('change', () => { $('[data-b="ctaValue"]', sl.closest('[data-banner]')).placeholder = ctaPh[sl.value] || ''; }));
+  };
+  const drawP = () => { $('#phones').innerHTML = phones.map(phoneRow).join('') || '<span class="muted">ما فيش أرقام</span>'; };
+  const drawC = () => { $('#channels').innerHTML = channels.map(chRow).join('') || '<span class="muted">ما فيش قنوات</span>'; };
+  drawB(); drawP(); drawC();
+  bindUploaders($('#sf').querySelector('.panel:nth-child(3)'));
+  A.actions.addBanner = () => { banners = collectBanners(); if (banners.length >= 8) return toast('الحد 8 بانرات', 'bad'); banners.push({ ctaType: 'none' }); drawB(); };
+  A.actions.rmBanner = (b) => { banners = collectBanners(); banners.splice(Number(b.dataset.i), 1); drawB(); };
+  A.actions.addPhone = () => { phones = collectPhones(); if (phones.length >= 6) return toast('الحد 6 أرقام', 'bad'); phones.push({ whatsapp: true, call: true }); drawP(); };
+  A.actions.rmPhone = (b) => { phones = collectPhones(); phones.splice(Number(b.dataset.i), 1); drawP(); };
+  A.actions.addCh = () => { channels = collectCh(); if (channels.length >= 10) return toast('الحد 10 قنوات', 'bad'); channels.push({ type: 'whatsapp_channel' }); drawC(); };
+  A.actions.rmCh = (b) => { channels = collectCh(); channels.splice(Number(b.dataset.i), 1); drawC(); };
   A.actions.save = (b) => busy(b, async () => {
     const v = (k) => $(`[data-in="${k}"]`);
     const body = {
       maintenance: v('maintenance').checked, maintenanceMsg: v('maintenanceMsg').value.trim(),
       maintenanceUntil: v('maintenanceUntil').value ? new Date(Date.parse(v('maintenanceUntil').value + ':00Z') - 2 * 3600e3).toISOString() : '',
       announcement: v('announcement').value.trim(), usdRate: v('usdRate').value, depositMin: v('depositMin').value, depositMax: v('depositMax').value,
-      supportWhatsapp: v('supportWhatsapp').value.trim(),
       banners: collectBanners().filter((x) => x.image),
-      payments: Object.fromEntries(Object.keys(s.payments).map((k) => [k, { enabled: v(`p_${k}_enabled`).checked, label: v(`p_${k}_label`).value.trim(), number: v(`p_${k}_number`).value.trim(), note: v(`p_${k}_note`).value.trim() }])),
-      social: Object.fromEntries(Object.keys(s.social).map((k) => [k, v(`s_${k}`).value.trim()])),
+      support: { phones: collectPhones().filter((x) => x.number), channels: collectCh().filter((x) => x.url) },
+      payments: Object.fromEntries(Object.keys(s.payments).map((k) => [k, { enabled: v(`p_${k}_enabled`).checked, label: v(`p_${k}_label`).value.trim(), number: v(`p_${k}_number`).value.trim(), note: v(`p_${k}_note`).value.trim(), image: v(`p_${k}_image`).value.trim() }])),
     };
     try { await api('/api/admin/settings', { method: 'POST', body }); toast('تم حفظ الإعدادات', 'ok'); } catch (e) { toast(e.message, 'bad', 5000); }
   });

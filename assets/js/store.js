@@ -53,19 +53,20 @@ function setTop(mode, title = '', action = '') {
     topbar.innerHTML = `<div class="tb-actions">
         <button class="btn-icon" data-act="drawer" aria-label="القائمة">${S.me ? `<span class="avatar" style="width:100%;height:100%;box-shadow:none;border-radius:13px">${esc((S.me.name || 'G').trim().charAt(0))}</span>` : icon('menu')}</button>
         <a class="btn-icon" href="#/notifications" aria-label="الإشعارات">${icon('bell')}${S.me?.unread ? '<i class="dot"></i>' : ''}</a>
+        <button class="btn-icon theme-toggle" data-act="theme" aria-label="الوضع الليلي/النهاري">${icon(isLight() ? 'moon' : 'sun')}</button>
       </div><a href="#/home" aria-label="الرئيسية">${brand()}</a>`;
   } else {
     topbar.innerHTML = `<button class="btn-icon" data-act="back" aria-label="رجوع">${icon('back')}</button>
-      <div class="tb-title">${esc(title)}</div><div class="tb-actions">${action || '<span style="width:44px"></span>'}</div>`;
+      <div class="tb-title">${esc(title)}</div><div class="tb-actions">${action || '<span style="width:42px"></span>'}</div>`;
   }
 }
 function updateChrome() {
   const h = parseHash().path.split('/')[0] || 'home';
-  const map = { home: 'home', categories: 'categories', category: 'categories', cart: 'cart', account: 'account' };
+  const map = { home: 'home', categories: 'categories', category: 'categories', wallet: 'wallet', deposit: 'wallet', deposits: 'wallet', cart: 'cart', account: 'account' };
   const cur = map[h] || '';
   const n = cartCount();
   tabbar.innerHTML = [
-    ['home', 'home', 'الرئيسية'], ['categories', 'grid', 'الأقسام'], ['cart', 'cart', 'السلة'], ['account', 'user', 'حسابي'],
+    ['home', 'home', 'الرئيسية'], ['categories', 'grid', 'الأقسام'], ['wallet', 'wallet', 'المحفظة'], ['cart', 'cart', 'السلة'], ['account', 'user', 'حسابي'],
   ].map(([k, ic, label]) => `<a class="tab ${cur === k ? 'active' : ''}" href="#/${k}">${icon(ic)}${k === 'cart' && n ? `<i class="count">${n}</i>` : ''}<span>${label}</span></a>`).join('');
   const bell = topbar.querySelector('a[href="#/notifications"]');
   if (bell) { bell.querySelector('.dot')?.remove(); if (S.me?.unread) bell.insertAdjacentHTML('beforeend', '<i class="dot"></i>'); }
@@ -78,14 +79,13 @@ function openDrawer() {
   const links = [
     ['#/home', 'home', 'الرئيسية'], ['#/categories', 'grid', 'الأقسام'], ['#/offers', 'tag', 'العروض'], ['#/cart', 'cart', 'السلة'],
     ['#/wallet', 'wallet', 'المحفظة'], ['#/orders', 'receipt', 'طلباتي'], ['#/notifications', 'bell', 'الإشعارات'],
-    ['#/favorites', 'heart', 'المفضلة'], ['#/account', 'user', 'حسابي'],
+    ['#/favorites', 'heart', 'المفضلة'], ['#/account', 'user', 'حسابي'], ['#/support', 'support', 'الدعم والتواصل'],
   ];
-  const sup = S.cfg?.settings?.supportWhatsapp;
   d.innerHTML = `<div class="drawer-head">${brand()}<button class="btn-icon" data-act="closeDrawer" aria-label="إغلاق">${icon('x')}</button></div>
     ${me ? `<a class="drawer-user" href="#/account"><span class="avatar">${esc(me.name.trim().charAt(0) || 'G')}</span><div style="min-width:0"><b>${esc(me.name)}</b><span>${esc(me.email)}</span></div></a>`
       : `<a class="btn btn-primary btn-block" href="#/login">${icon('user')} تسجيل الدخول</a>`}
     <nav class="menu">${links.map(([h, ic, t]) => `<a href="${h}">${icon(ic)}<span>${t}</span>${icon('forward', 'chev')}</a>`).join('')}
-    ${sup ? `<a href="https://wa.me/${esc(sup.replace(/^\+/, ''))}" target="_blank" rel="noopener">${icon('support')}<span>الدعم الفني</span>${icon('forward', 'chev')}</a>` : ''}
+    <button data-act="theme">${icon(isLight() ? 'moon' : 'sun')}<span>${isLight() ? 'الوضع الليلي' : 'الوضع النهاري'}</span></button>
     ${me ? `<button class="danger" data-act="logout">${icon('logout')}<span>تسجيل الخروج</span></button>` : ''}</nav>`;
   ov.addEventListener('click', closeDrawer);
   document.body.append(ov, d);
@@ -110,6 +110,7 @@ document.addEventListener('click', async (e) => {
   if (!a) return;
   const name = a.dataset.act;
   if (name === 'back') { if (S.navCount > 1) history.back(); else go('#/home'); return; }
+  if (name === 'theme') { toggleTheme(); if ($('#drawer')) openDrawer(); return; }
   if (name === 'drawer') return openDrawer();
   if (name === 'closeDrawer') return closeDrawer();
   if (name === 'logout') {
@@ -122,6 +123,57 @@ document.addEventListener('click', async (e) => {
   if (fn) { e.preventDefault(); fn(a, e); }
 });
 window.addEventListener('scroll', () => topbar.classList.toggle('scrolled', window.scrollY > 8), { passive: true });
+
+/* ================= Theme ================= */
+const isLight = () => document.documentElement.getAttribute('data-theme') === 'light';
+function toggleTheme() {
+  const light = !isLight();
+  if (light) document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme');
+  store.set('gl_theme', light ? 'light' : 'dark');
+  try { localStorage.setItem('gl_theme', light ? 'light' : 'dark'); } catch {}
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', light ? '#fffbd6' : '#1e0c0d');
+  $$('.theme-toggle').forEach((b) => { b.innerHTML = icon(light ? 'moon' : 'sun'); });
+  const sw = $('#themeSw'); if (sw) sw.checked = light;
+}
+
+/* ================= Links (banners / support) ================= */
+const digits = (v) => String(v || '').replace(/[^\d]/g, '');
+function waLink(num) { let d = digits(num); if (d.startsWith('0')) d = '218' + d.slice(1); return 'https://wa.me/' + d; }
+function ctaHref(type, value) {
+  if (type === 'url' || type === 'tiktok') return /^https:\/\//.test(value) ? value : '';
+  if (type === 'page') return /^#\//.test(value) ? value : '';
+  if (type === 'whatsapp') return waLink(value);
+  if (type === 'phone') return 'tel:' + String(value).replace(/[^\d+]/g, '');
+  return '';
+}
+const CTA_ICON = { url: 'external', page: 'forward', whatsapp: 'whatsapp', tiktok: 'tiktok', phone: 'call' };
+const CH = { whatsapp: ['whatsapp', 'واتساب'], whatsapp_channel: ['megaphone', 'قناة واتساب'], telegram: ['telegram', 'تيليقرام'], tiktok: ['tiktok', 'تيك توك'], instagram: ['instagram', 'إنستقرام'], facebook: ['facebook', 'فيسبوك'], youtube: ['youtube', 'يوتيوب'], snapchat: ['snapchat', 'سناب شات'], website: ['globe', 'الموقع'] };
+function supportData() {
+  const st = S.cfg?.settings || {};
+  const sup = st.support || { phones: [], channels: [] };
+  const phones = [...(sup.phones || [])];
+  if (!phones.length && st.supportWhatsapp) phones.push({ label: 'الدعم الفني', number: st.supportWhatsapp, whatsapp: true, call: false });
+  const channels = [...(sup.channels || [])];
+  const so = st.social || {};
+  for (const [k, t] of [['whatsapp', 'whatsapp'], ['telegram', 'telegram'], ['tiktok', 'tiktok'], ['instagram', 'instagram'], ['facebook', 'facebook']]) {
+    if (so[k] && /^https:\/\//.test(so[k]) && !channels.some((c) => c.url === so[k])) channels.push({ type: t, label: '', url: so[k] });
+  }
+  return { phones, channels };
+}
+function supportBlock() {
+  const { phones, channels } = supportData();
+  if (!phones.length && !channels.length) return '';
+  const items = [];
+  for (const p of phones) {
+    if (p.whatsapp) items.push(`<a class="sup-item" href="${esc(waLink(p.number))}" target="_blank" rel="noopener"><span class="si">${icon('whatsapp')}</span><span style="min-width:0"><b>${esc(p.label || 'واتساب')}</b><small class="num">${esc(p.number)}</small></span></a>`);
+    if (p.call) items.push(`<a class="sup-item" href="tel:${esc(p.number.replace(/[^\d+]/g, ''))}"><span class="si">${icon('call')}</span><span style="min-width:0"><b>${esc(p.label ? 'اتصال — ' + p.label : 'اتصال')}</b><small class="num">${esc(p.number)}</small></span></a>`);
+  }
+  for (const c of channels) {
+    const [ic, name] = CH[c.type] || CH.website;
+    items.push(`<a class="sup-item" href="${esc(c.url)}" target="_blank" rel="noopener"><span class="si">${icon(ic)}</span><span style="min-width:0"><b>${esc(c.label || name)}</b><small>${esc(name)}</small></span></a>`);
+  }
+  return `<div class="sup-grid reveal">${items.join('')}</div>`;
+}
 
 /* ================= Shared UI ================= */
 function priceHtml(s) {
@@ -151,12 +203,12 @@ const statusBadge = (st) => ({
   rejected: '<span class="badge badge-bad">مرفوض</span>',
 }[st] || `<span class="badge badge-info">${esc(st)}</span>`);
 function footer() {
-  const s = S.cfg?.settings || {};
-  const so = s.social || {};
-  const links = [['facebook', so.facebook], ['instagram', so.instagram], ['telegram', so.telegram], ['tiktok', so.tiktok], ['whatsapp', so.whatsapp || (s.supportWhatsapp ? `https://wa.me/${s.supportWhatsapp.replace(/^\+/, '')}` : '')]].filter(([, u]) => u && /^https:\/\//.test(u));
-  const pays = Object.values(s.payments || {}).filter((p) => p.enabled).map((p) => `<span>${esc(p.label)}</span>`).join('');
+  const st = S.cfg?.settings || {};
+  const pays = Object.entries(st.payments || {}).filter(([, p]) => p.enabled).map(([k]) => pmIco(k)).join('');
+  const { channels } = supportData();
   return `<footer class="footer">${brand()}${pays ? `<div class="pays">${pays}</div>` : ''}
-    ${links.length ? `<div class="socials">${links.map(([k, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener" aria-label="${k}">${icon(k)}</a>`).join('')}</div>` : ''}
+    ${channels.length ? `<div class="socials">${channels.map((c) => `<a href="${esc(c.url)}" target="_blank" rel="noopener" aria-label="${esc((CH[c.type] || CH.website)[1])}">${icon((CH[c.type] || CH.website)[0])}</a>`).join('')}</div>` : ''}
+    <a href="#/support" class="btn btn-ghost btn-sm">${icon('support', 'ico-sm')} الدعم والتواصل</a>
     <small>© ${new Date().getFullYear()} جيمنق ليبيا — جميع الحقوق محفوظة</small>
     <span class="credit">تطوير <a href="https://wa.me/${CONFIG.DEV_CREDIT.whatsapp}" target="_blank" rel="noopener">${esc(CONFIG.DEV_CREDIT.name)}</a></span></footer>`;
 }
@@ -293,30 +345,47 @@ async function home() {
   const best = [...svcs].filter((x) => !(x.auto && x.stock === 0) && imgUrl(x.image)).sort((a, b) => b.sold - a.sold || a.order - b.order).slice(0, 10);
   const offers = svcs.filter((x) => x.discount > 0).slice(0, 10);
   const banners = (s.banners || []).filter((b) => imgUrl(b.image));
-  const slides = banners.length
-    ? banners.map((b) => `<a class="slide" href="${esc(b.link && b.link.startsWith('#') ? b.link : '#/categories')}">${imgTag(b.image, b.title)}<div class="slide-body">${b.title ? `<h3>${esc(b.title)}</h3>` : ''}${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ''}</div></a>`).join('')
-    : `<div class="slide default"><h3>اشحن ألعابك المفضلة فوراً وبأفضل سعر في ليبيا</h3><p>ادفع بليبيانا أو مدار أو تحويل بنكي، واستلم طلبك في دقائق.</p><a class="btn btn-primary btn-sm" href="#/categories">تصفّح الأقسام</a>
-        <div class="trust"><span>${icon('shield')} دفع آمن</span><span>${icon('clock')} تنفيذ سريع</span><span>${icon('support')} دعم واتساب</span></div></div>`;
+  const slide = (b) => {
+    const href = ctaHref(b.ctaType, b.ctaValue);
+    const ext = href && !href.startsWith('#');
+    const cta = href ? `<a class="b-cta" href="${esc(href)}" ${ext ? 'target="_blank" rel="noopener"' : ''}>${icon(CTA_ICON[b.ctaType] || 'external')} ${esc(b.ctaLabel || 'زيارة')}</a>` : '';
+    const text = b.title || b.subtitle;
+    return `<div class="b-slide ${text || cta ? 'has-text' : ''}">${imgTag(b.image, b.title)}${text || cta ? `<div class="b-body"><div>${b.title ? `<h3>${esc(b.title)}</h3>` : ''}${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ''}</div>${cta}</div>` : ''}</div>`;
+  };
+  const slides = banners.length ? banners.map(slide).join('') : '';
   const n = banners.length || 1;
   view.innerHTML = `
     <a class="searchbar" href="#/search">${icon('search')}<span>ابحث عن لعبة، بطاقة، أو اشتراك...</span></a>
     ${S.me ? `<div class="balance"><div><small>رصيدك</small><div class="amt">${money(S.me.balance)}</div></div><a class="btn-add" href="#/wallet">${icon('plus')} شحن</a></div>`
       : `<div class="balance"><div><small>عندك حساب؟</small><div style="font-weight:700;font-size:15px">سجّل دخولك عشان تشحن</div></div><a class="btn-add" href="#/login">دخول</a></div>`}
     ${s.announcement ? `<div class="announce">${icon('info')}<span>${esc(s.announcement)}</span></div>` : ''}
-    <div class="hero"><div class="hero-track" id="track">${slides}</div>${n > 1 ? `<div class="hero-dots">${Array.from({ length: n }, (_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>
+    ${banners.length ? `<div class="banners"><div class="b-track" id="track">${slides}</div>${n > 1 ? `<div class="b-dots">${Array.from({ length: n }, (_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>`
+      : `<div class="b-default" style="margin-top:16px"><h3>اشحن ألعابك المفضلة فوراً وبأفضل سعر في ليبيا</h3><p>ادفع بليبيانا أو مدار أو تحويل بنكي، واستلم طلبك في دقائق.</p><a class="btn btn-primary btn-sm" href="#/categories">تصفّح الأقسام</a>
+        <div class="trust"><span>${icon('shield')} دفع آمن</span><span>${icon('clock')} تنفيذ سريع</span><span>${icon('support')} دعم فني</span></div></div>`}
     <section class="sec"><div class="sec-head"><h2>الأقسام</h2><a href="#/categories">الكل</a></div>
       <div class="h-scroll">${cat.categories.slice(0, 12).map((c) => `<a class="cat-pill" href="#/category/${encodeURIComponent(c.id)}"><div class="ring">${imgTag(c.image, c.name)}</div><span>${esc(c.name.trim())}</span></a>`).join('') || '<span class="muted">لا توجد أقسام بعد</span>'}</div></section>
     ${best.length ? `<section class="sec"><div class="sec-head"><h2>الأكثر مبيعاً</h2><a href="#/categories">الكل</a></div><div class="h-scroll">${best.map(pCard).join('')}</div></section>` : ''}
     ${offers.length ? `<section class="sec"><div class="sec-head"><h2>عروض وخصومات</h2><a href="#/offers">الكل</a></div><div class="h-scroll">${offers.map(pCard).join('')}</div></section>` : ''}
     <section class="sec"><div class="sec-head"><h2>كل الأقسام</h2></div>
-      <div class="cat-grid">${cat.categories.slice(0, 9).map(catCard).join('')}</div>
+      <div class="cat-grid reveal">${cat.categories.slice(0, 9).map(catCard).join('')}</div>
       ${cat.categories.length > 9 ? `<a class="btn btn-ghost btn-block" style="margin-top:16px" href="#/categories">عرض كل الأقسام (${cat.categories.length})</a>` : ''}</section>
+    ${supportBlock() ? `<section class="sec"><div class="sec-head"><h2>تواصل معنا</h2><a href="#/support">الكل ${icon('forward')}</a></div>${supportBlock()}</section>` : ''}
     ${footer()}`;
   if (n > 1) {
-    let i = 0;
-    const track = $('#track'), dots = $$('.hero-dots i');
-    S.timers.push(setInterval(() => { i = (i + 1) % n; track.style.transform = `translateX(${i * 100}%)`; dots.forEach((d, k) => d.classList.toggle('on', k === i)); }, 4500));
+    const track = $('#track'), dots = $$('.b-dots i');
+    let idx = 0, visible = true, paused = false;
+    const setDot = () => dots.forEach((d, k) => d.classList.toggle('on', k === idx));
+    track.addEventListener('scroll', () => { idx = Math.round(Math.abs(track.scrollLeft) / track.clientWidth); setDot(); }, { passive: true });
+    track.addEventListener('touchstart', () => { paused = true; }, { passive: true });
+    track.addEventListener('touchend', () => { setTimeout(() => { paused = false; }, 4000); }, { passive: true });
+    try { new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(track); } catch {}
+    S.timers.push(setInterval(() => {
+      if (!visible || paused || document.hidden) return;
+      idx = (idx + 1) % n;
+      track.children[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+    }, 5000));
   }
+
 }
 function catCard(c) {
   return `<a class="cat-card" href="#/category/${encodeURIComponent(c.id)}"><div class="cm">${imgTag(c.image, c.name)}</div><b>${esc(c.name.trim())}</b></a>`;
@@ -327,7 +396,7 @@ async function categoriesPage() {
   setTop('inner', 'الأقسام', `<a class="btn-icon" href="#/search" aria-label="بحث">${icon('search')}</a>`);
   view.innerHTML = skGrid(6);
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
-  view.innerHTML = S.cat.categories.length ? `<div class="cat-grid" style="margin-top:16px">${S.cat.categories.map(catCard).join('')}</div>` : emptyState('grid', 'لا توجد أقسام بعد');
+  view.innerHTML = S.cat.categories.length ? `<div class="cat-grid reveal" style="margin-top:16px">${S.cat.categories.map(catCard).join('')}</div>` : emptyState('grid', 'لا توجد أقسام بعد');
 }
 
 // 5. صفحة القسم
@@ -357,7 +426,7 @@ function listPage(items, { emptyText = 'لا توجد نتائج', head = '' } =
   };
   const chips = [['default', 'الكل'], ['low', 'الأقل سعراً'], ['high', 'الأعلى سعراً'], ['best', 'الأكثر مبيعاً'], ['off', 'خصم'], ['auto', 'تسليم فوري']];
   view.innerHTML = `${head}<div class="toolbar">${chips.map(([k, t]) => `<button class="chip" data-act="sort" data-sort="${k}">${t}</button>`).join('')}</div>
-    <div class="p-grid wide" id="grid"></div><button class="btn btn-ghost btn-block hidden" id="more" data-act="more" style="margin-top:18px">تحميل المزيد</button>`;
+    <div class="p-grid wide reveal" id="grid"></div><button class="btn btn-ghost btn-block hidden" id="more" data-act="more" style="margin-top:18px">تحميل المزيد</button>`;
   S.actions.sort = (b) => { sort = b.dataset.sort; page = 1; draw(); };
   S.actions.more = () => { page++; draw(); };
   draw();
@@ -566,9 +635,12 @@ async function cartPage() {
 }
 
 // 8. المحفظة
-const PM_ICON = { libyana: 'sim', madar: 'sim', cards: 'card', onepay: 'bank', lypay: 'bank', crypto: 'crypto' };
+var PM_ICON = { libyana: 'sim', madar: 'sim', cards: 'card', onepay: 'bank', lypay: 'bank', crypto: 'crypto' };
 const PM_SUB = { libyana: 'تحويل رصيد', madar: 'تحويل رصيد', cards: 'كرت شحن', onepay: 'تحويل بنكي', lypay: 'تحويل بنكي' };
-const pmIco = (k) => `<span class="pm-ico">${icon(PM_ICON[k] || 'coin')}</span>`;
+function pmIco(k) {
+  const img = imgUrl(S.cfg?.settings?.payments?.[k]?.image);
+  return `<span class="pm-ico">${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : icon(PM_ICON[k] || 'coin')}</span>`;
+}
 async function walletPage() {
   if (!S.user) return needLogin('wallet');
   setTop('inner', 'المحفظة');
@@ -644,7 +716,10 @@ async function accountPage() {
     setTop('inner', 'حسابي');
     view.innerHTML = `<div class="profile-head"><span class="avatar lg">${icon('user')}</span><div><b>ما سجلتش دخول</b><span style="direction:rtl">سجّل دخولك عشان تشوف طلباتك ورصيدك</span></div></div>
       <div style="display:grid;gap:10px;margin-top:22px"><a class="btn btn-primary btn-block" href="#/login?next=account">تسجيل الدخول</a><a class="btn btn-ghost btn-block" href="#/signup">إنشاء حساب جديد</a></div>
-      <div class="list" style="margin-top:22px"><a class="row-link" href="#/favorites"><span class="ri">${icon('heart')}</span><span class="rt"><b>المفضلة</b></span>${icon('forward', 'chev')}</a></div>${footer()}`;
+      <div class="list" style="margin-top:24px"><a class="row-link" href="#/favorites"><span class="ri">${icon('heart')}</span><span class="rt"><b>المفضلة</b></span>${icon('forward', 'chev')}</a>
+      <a class="row-link" href="#/support"><span class="ri">${icon('support')}</span><span class="rt"><b>الدعم والتواصل</b></span>${icon('forward', 'chev')}</a>
+      <div class="row-link"><span class="ri">${icon('moon')}</span><span class="rt"><b>الوضع النهاري</b></span><label class="switch"><input type="checkbox" id="themeSw" ${isLight() ? 'checked' : ''} aria-label="الوضع النهاري"></label></div></div>${footer()}`;
+    $('#themeSw').addEventListener('change', () => toggleTheme());
     return;
   }
   setTop('inner', 'حسابي');
@@ -653,7 +728,6 @@ async function accountPage() {
   const me = S.me;
   if (!me) { view.innerHTML = errorState('تعذّر تحميل الحساب'); return; }
   const pushOn = store.get('gl_push', false) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
-  const sup = S.cfg?.settings?.supportWhatsapp;
   view.innerHTML = `<div class="profile-head"><span class="avatar lg">${esc(me.name.trim().charAt(0) || 'G')}</span><div style="min-width:0"><b>${esc(me.name)}</b><span>${esc(me.email)}</span></div>
       <a class="btn btn-ghost btn-xs" href="#/profile">تعديل</a></div>
     <div class="list info-rows">
@@ -669,9 +743,11 @@ async function accountPage() {
     <div class="sec-label">الإعدادات</div><div class="list">
       <div class="row-link"><span class="ri">${icon('bell')}</span><span class="rt"><b>إشعارات الجوال</b><small>تنبيه لما يتنفذ طلبك</small></span><label class="switch"><input type="checkbox" id="push" ${pushOn ? 'checked' : ''} aria-label="إشعارات"></label></div>
       <a class="row-link" href="#/password"><span class="ri">${icon('lock')}</span><span class="rt"><b>تغيير كلمة المرور</b></span>${icon('forward', 'chev')}</a>
-      ${sup ? `<a class="row-link" href="https://wa.me/${esc(sup.replace(/^\+/, ''))}" target="_blank" rel="noopener"><span class="ri">${icon('support')}</span><span class="rt"><b>الدعم الفني</b><small>واتساب</small></span>${icon('forward', 'chev')}</a>` : ''}
+      <div class="row-link"><span class="ri">${icon('moon')}</span><span class="rt"><b>الوضع النهاري</b></span><label class="switch"><input type="checkbox" id="themeSw" ${isLight() ? 'checked' : ''} aria-label="الوضع النهاري"></label></div>
+      <a class="row-link" href="#/support"><span class="ri">${icon('support')}</span><span class="rt"><b>الدعم والتواصل</b></span>${icon('forward', 'chev')}</a>
       <button class="row-link danger" data-act="logout"><span class="ri">${icon('logout')}</span><span class="rt"><b>تسجيل الخروج</b></span></button>
     </div>${footer()}`;
+  $('#themeSw').addEventListener('change', () => toggleTheme());
   $('#push').addEventListener('change', async (e) => {
     if (!e.target.checked) { store.set('gl_push', false); toast('أوقف الإشعارات من إعدادات المتصفح للتوقف نهائياً', 'info', 4000); return; }
     try { await enablePush(S.cfg.vapidKey); toast('تم تفعيل الإشعارات', 'ok'); } catch (err) { e.target.checked = false; toast(err.message, 'bad', 4500); }
@@ -727,12 +803,12 @@ async function ordersPage(q) {
   const draw = () => {
     const list = filter === 'all' ? r.orders : r.orders.filter((o) => o.status === filter);
     view.innerHTML = `<div class="toolbar">${[['all', 'الكل'], ['completed', 'مكتمل'], ['pending', 'معلّق'], ['rejected', 'مرفوض']].map(([k, t]) => `<button class="chip ${filter === k ? 'active' : ''}" data-act="f" data-k="${k}">${t}</button>`).join('')}</div>
-      ${list.length ? list.map((o) => {
+      ${list.length ? '<div class="reveal">' + list.map((o) => {
         const img = o.image || svcById(o.serviceId)?.image;
         return `<a class="o-card" href="#/order/${encodeURIComponent(o.id)}"><span class="c-thumb">${imgTag(img, o.title)}</span>
           <div style="min-width:0"><b>${esc(o.title)}</b><small><span class="num">#${esc(o.id.slice(0, 6).toUpperCase())}</span> • ${timeAgo(o.createdAt)}</small>${o.hasCodes && o.status === 'completed' ? '<small class="gold" style="display:block">الكود جاهز</small>' : ''}</div>
           <div class="o-side"><span class="price">${money(o.total)}</span>${statusBadge(o.status)}</div></a>`;
-      }).join('') : emptyState('box', '', filter === 'all' ? 'لا توجد طلبات سابقة. ابدأ التسوق الآن' : 'لا توجد طلبات بهذي الحالة', filter === 'all' ? '<a class="btn btn-primary btn-sm" href="#/categories">تصفّح الأقسام</a>' : '')}`;
+      }).join('') + '</div>' : emptyState('box', '', filter === 'all' ? 'لا توجد طلبات سابقة. ابدأ التسوق الآن' : 'لا توجد طلبات بهذي الحالة', filter === 'all' ? '<a class="btn btn-primary btn-sm" href="#/categories">تصفّح الأقسام</a>' : '')}`;
   };
   S.actions.f = (b) => { filter = b.dataset.k; draw(); };
   S.actions.reload = () => render();
@@ -744,7 +820,7 @@ async function orderPage(id) {
   view.innerHTML = `<div class="sk" style="height:60px;margin-top:16px"></div><div class="sk" style="height:200px;margin-top:12px"></div>`;
   let o;
   try { [o] = await Promise.all([api('/api/orders/' + encodeURIComponent(id)), loadConfig().catch(() => null)]); } catch (e) { view.innerHTML = e.status === 404 ? emptyState('receipt', 'الطلب غير موجود') : errorState(e.message); return; }
-  const sup = S.cfg?.settings?.supportWhatsapp;
+  const supWa = supportData().phones.find((p) => p.whatsapp);
   const stIcon = { completed: ['checkc', 'var(--ok)', 'var(--ok-bg)', 'تم تنفيذ الطلب'], pending: ['clock', 'var(--warn)', 'var(--warn-bg)', 'طلبك قيد التنفيذ'], rejected: ['xc', 'var(--bad)', 'var(--bad-bg)', 'تم رفض الطلب'] }[o.status] || ['info', 'var(--info)', 'var(--info-bg)', o.status];
   view.innerHTML = `<div class="status-line" style="color:${stIcon[1]};background:${stIcon[2]}">${icon(stIcon[0])}<div>${stIcon[3]}<small>${o.status === 'pending' ? 'بيوصلك إشعار أول ما يتنفذ' : o.status === 'rejected' ? 'المبلغ رجع لمحفظتك' : fmtDate(o.createdAt, true)}</small></div></div>
     ${o.codes && o.codes.length ? `<div class="box"><b>${o.codes.length > 1 ? 'الأكواد' : 'الكود'}</b>${o.codes.map((c) => `<div class="code-box"><code>${esc(c)}</code><button class="btn btn-soft btn-sm" data-copy="${esc(c)}">${icon('copy', 'ico-sm')} نسخ</button></div>`).join('')}
@@ -759,7 +835,7 @@ async function orderPage(id) {
       <div><span>طريقة التسليم</span><span>${o.delivery === 'auto' ? 'تلقائي' : 'يدوي'}</span></div>
       <div><span>الحالة</span><span>${statusBadge(o.status)}</span></div>
       <div style="padding-top:10px;border-top:1px solid var(--line)"><span>المبلغ</span><b class="gold">${money(o.total)}</b></div></div>
-    ${sup ? `<a class="btn btn-ghost btn-block" style="margin-top:16px" target="_blank" rel="noopener" href="https://wa.me/${esc(sup.replace(/^\+/, ''))}?text=${encodeURIComponent('استفسار عن الطلب #' + o.id.slice(0, 8).toUpperCase())}">${icon('support')} تواصل مع الدعم بخصوص الطلب</a>` : ''}`;
+    ${supWa ? `<a class="btn btn-ghost btn-block" style="margin-top:16px" target="_blank" rel="noopener" href="${esc(waLink(supWa.number))}?text=${encodeURIComponent('استفسار عن الطلب #' + o.id.slice(0, 8).toUpperCase())}">${icon('support')} تواصل مع الدعم بخصوص الطلب</a>` : ''}`;
 }
 
 // 12. الإشعارات
@@ -772,10 +848,18 @@ async function notificationsPage() {
   if (S.me) { S.me.unread = 0; updateChrome(); }
   if (!r.notifications.length) { view.innerHTML = emptyState('bell', 'ما فيش إشعارات', 'هنا بتلقى تحديثات طلباتك وإيداعاتك'); return; }
   const ic = { order: 'receipt', deposit: 'wallet', admin: 'bell', info: 'bell' };
-  view.innerHTML = r.notifications.map((n) => {
+  view.innerHTML = '<div class="reveal">' + r.notifications.map((n) => {
     const inner = `<span class="n-ico">${icon(ic[n.type] || 'bell')}</span><div style="min-width:0"><b>${esc(n.title)}</b><p>${esc(n.body)}</p><small>${timeAgo(n.createdAt)}</small></div>`;
     return n.type === 'order' && n.ref ? `<a class="n-card ${n.unread ? 'unread' : ''}" style="color:inherit" href="#/order/${encodeURIComponent(n.ref)}">${inner}</a>` : `<div class="n-card ${n.unread ? 'unread' : ''}">${inner}</div>`;
-  }).join('');
+  }).join('') + '</div>';
+}
+
+// الدعم والتواصل
+async function supportPage() {
+  setTop('inner', 'الدعم والتواصل');
+  try { await loadConfig(); } catch (e) { view.innerHTML = errorState(e.message); return; }
+  const block = supportBlock();
+  view.innerHTML = `<p class="page-sub">تواصل معنا في أي وقت، نرد عليك في أسرع وقت.</p>${block || emptyState('support', 'ما فيش أرقام دعم مضافة بعد')}${footer()}`;
 }
 
 // 15. الصيانة
@@ -822,7 +906,7 @@ const ROUTES = [
   [/^search$/, (m, q) => searchPage(q)], [/^offers$/, offersPage], [/^favorites$/, favoritesPage], [/^cart$/, cartPage],
   [/^wallet$/, walletPage], [/^deposit\/(\w+)$/, (m) => depositPage(m[1])], [/^deposits$/, depositsPage],
   [/^account$/, accountPage], [/^profile$/, profilePage], [/^password$/, passwordPage],
-  [/^orders$/, (m, q) => ordersPage(q)], [/^order\/([\w-]+)$/, (m) => orderPage(m[1])], [/^notifications$/, notificationsPage],
+  [/^orders$/, (m, q) => ordersPage(q)], [/^order\/([\w-]+)$/, (m) => orderPage(m[1])], [/^notifications$/, notificationsPage], [/^support$/, supportPage],
 ];
 S.navCount = 0;
 async function render() {
@@ -838,6 +922,7 @@ async function render() {
   const r = ROUTES.find(([re]) => re.test(path));
   updateChrome();
   window.scrollTo(0, 0);
+  view.classList.remove('enter'); void view.offsetWidth; view.classList.add('enter');
   if (!r) return notFound();
   try { await r[1](path.match(r[0]), q); }
   catch (e) { console.error(e); view.innerHTML = errorState(e.message); }
