@@ -1,8 +1,8 @@
 import {
   auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, captcha, loginWith, logout, onAuthStateChanged, enablePush, compressImage,
-} from './core.js?v=202610200431';
-import { icon, brand, CAT_ICONS } from './icons.js?v=202610200431';
+} from './core.js?v=202610200540';
+import { icon, brand, CAT_ICONS } from './icons.js?v=202610200540';
 
 const A = { user: null, cfg: null, tab: 'dash', actions: {}, timers: [], cat: null, stats: null, cap: null };
 const root = $('#root');

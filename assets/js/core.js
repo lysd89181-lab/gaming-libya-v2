@@ -4,8 +4,8 @@ import {
   setPersistence, browserLocalPersistence, browserSessionPersistence,
   reauthenticateWithCredential, EmailAuthProvider, updatePassword,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { CONFIG } from './config.js?v=202610200431';
-import { icon } from './icons.js?v=202610200431';
+import { CONFIG } from './config.js?v=202610200540';
+import { icon } from './icons.js?v=202610200540';
 
 export { CONFIG };
 export const app = initializeApp(CONFIG.firebase);
@@ -69,6 +69,19 @@ export function fmtDate(iso, withTime = false) {
   if (withTime) Object.assign(opt, { hour: '2-digit', minute: '2-digit', hour12: false });
   return new Intl.DateTimeFormat('en-GB', opt).format(d).replace(',', ' ');
 }
+
+/* ---------- Ripple (لمسة ناعمة على الأزرار) ---------- */
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target.closest('.btn, .soft');
+  if (!el || el.disabled) return;
+  const r = el.getBoundingClientRect();
+  const d = Math.max(r.width, r.height);
+  const s = document.createElement('span');
+  s.className = 'rip';
+  s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
+  el.appendChild(s);
+  setTimeout(() => s.remove(), 600);
+}, { passive: true });
 
 /* ---------- Storage (آمن) ---------- */
 export const store = {

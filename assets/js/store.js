@@ -2,8 +2,8 @@ import {
   CONFIG, auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, uuid, captcha, loginWith, signupWith, resetPassword, changePassword, logout,
   onAuthStateChanged, enablePush,
-} from './core.js?v=202610200431';
-import { icon, logoMark, brand } from './icons.js?v=202610200431';
+} from './core.js?v=202610200540';
+import { icon, logoMark, brand, SKY } from './icons.js?v=202610200540';
 
 /* ================= State ================= */
 const S = {
@@ -62,14 +62,15 @@ function setTop(mode, title = '', action = '') {
 }
 function updateChrome() {
   const h = parseHash().path.split('/')[0] || 'home';
-  const map = { home: 'home', categories: 'categories', category: 'categories', wallet: 'wallet', deposit: 'wallet', deposits: 'wallet', cart: 'cart', account: 'account' };
+  const map = { home: 'home', categories: 'categories', category: 'categories', search: 'categories', offers: 'categories', wallet: 'wallet', deposit: 'wallet', deposits: 'wallet', orders: 'orders', order: 'orders', account: 'account', profile: 'account', password: 'account', support: 'account', notifications: 'account', favorites: 'account', cart: 'categories' };
   const cur = map[h] || '';
-  const n = cartCount();
-  tabbar.innerHTML = [
-    ['home', 'home', 'الرئيسية'], ['categories', 'grid', 'الأقسام'], ['wallet', 'wallet', 'المحفظة'], ['cart', 'cart', 'السلة'], ['account', 'user', 'حسابي'],
-  ].map(([k, ic, label]) => `<a class="tab ${cur === k ? 'active' : ''}" href="#/${k}">${icon(ic)}${k === 'cart' && n ? `<i class="count">${n}</i>` : ''}<span>${label}</span></a>`).join('');
+  const tabs = [['home', 'home', 'الرئيسية'], ['categories', 'gamepad', 'الألعاب'], ['wallet', 'wallet', 'المحفظة'], ['orders', 'receipt', 'طلباتي'], ['account', 'user', 'حسابي']];
+  const idx = tabs.findIndex(([k]) => k === cur);
+  tabbar.innerHTML = `<span class="tab-ind" style="${idx < 0 ? 'opacity:0' : `right:calc(${idx * 20}% + 6px)`}"></span>` + tabs.map(([k, ic, label]) => `<a class="tab ${cur === k ? 'active' : ''}" href="#/${k}">${icon(ic)}<span>${label}</span></a>`).join('');
   const bell = topbar.querySelector('a[href="#/notifications"]');
   if (bell) { bell.querySelector('.dot')?.remove(); if (S.me?.unread) bell.insertAdjacentHTML('beforeend', '<i class="dot"></i>'); }
+  const cc = $('#bandCart .count');
+  if (cc) { const n = cartCount(); cc.textContent = n; cc.classList.toggle('hidden', !n); }
 }
 function openDrawer() {
   closeDrawer();
@@ -131,7 +132,7 @@ function toggleTheme() {
   if (light) document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme');
   store.set('gl_theme', light ? 'light' : 'dark');
   try { localStorage.setItem('gl_theme', light ? 'light' : 'dark'); } catch {}
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', light ? '#fffbd6' : '#1e0c0d');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', light ? '#f3f5ef' : '#141414');
   $$('.theme-toggle').forEach((b) => { b.innerHTML = icon(light ? 'moon' : 'sun'); });
   const sw = $('#themeSw'); if (sw) sw.checked = light;
 }
@@ -180,10 +181,19 @@ function priceHtml(s) {
   if (s.enableQuantity) return `<b><small class="cur">من</small> <span class="num">${fmt(linePrice(s, s.qtyMin))}</span> <span class="cur">د.ل</span></b>`;
   return `<b><span class="num">${fmt(s.finalPrice)}</span> <span class="cur">د.ل</span></b>${s.discount > 0 ? `<s class="num">${fmt(s.price)}</s>` : ''}`;
 }
+const svcLink = (s) => `#/category/${encodeURIComponent(s.category)}?p=${encodeURIComponent(s.id)}`;
+function gmTile(c) {
+  const vis = c.icon ? icon(c.icon) : imgTag(c.image, c.name);
+  return `<a class="gm" href="#/category/${encodeURIComponent(c.id)}"><span class="ic">${vis}</span><span>${esc(c.name.trim())}</span></a>`;
+}
+function cvTile(s) {
+  const out = s.auto && s.stock === 0;
+  return `<a class="cv" href="${svcLink(s)}"><span class="im">${imgTag(s.image, s.title)}${s.discount > 0 ? `<i class="off">-${s.discount}%</i>` : ''}${s.auto && !out ? `<i class="fast">${icon('bolt')}</i>` : ''}</span><b>${esc(s.title)}</b><small>${out ? 'نفذت الكمية' : `${s.enableQuantity ? 'من ' : ''}${fmt(s.enableQuantity ? linePrice(s, s.qtyMin) : s.finalPrice)} د.ل`}</small></a>`;
+}
 function pCard(s) {
   const out = s.auto && s.stock === 0;
   const tag = s.auto ? `<span class="p-tag ${out ? 'out' : ''}">${out ? 'نفذت الكمية' : `${icon('bolt')} تسليم فوري`}</span>` : s.badge ? `<span class="p-tag out">${esc(s.badge)}</span>` : '';
-  return `<a class="p-card ${out ? 'out' : ''}" href="#/service/${encodeURIComponent(s.id)}">
+  return `<a class="p-card ${out ? 'out' : ''}" href="${svcLink(s)}">
     <div class="p-media">${imgTag(s.image, s.title)}${s.discount > 0 ? `<span class="p-off"><span class="num">${s.discount}%</span>&nbsp;خصم</span>` : ''}${tag}
     <button class="p-fav ${S.favs.has(s.id) ? 'on' : ''}" data-fav="${esc(s.id)}" aria-label="المفضلة">${icon('heart')}</button></div>
     <div class="p-body"><div class="p-title">${esc(s.title)}</div><div class="p-price">${priceHtml(s)}</div></div><span class="p-buy">${out ? 'غير متوفر' : 'اشترِ الآن'}</span></a>`;
@@ -204,13 +214,14 @@ const statusBadge = (st) => ({
 }[st] || `<span class="badge badge-info">${esc(st)}</span>`);
 function footer() {
   const st = S.cfg?.settings || {};
-  const pays = Object.entries(st.payments || {}).filter(([, p]) => p.enabled).map(([k]) => pmIco(k)).join('');
+  const pays = Object.entries(st.payments || {}).filter(([, p]) => p.enabled && imgUrl(p.image)).map(([k]) => pmIco(k)).join('');
+  const names = Object.values(st.payments || {}).filter((p) => p.enabled).map((p) => esc(p.label)).join(' • ');
   const { channels } = supportData();
-  return `<footer class="footer">${brand()}${pays ? `<div class="pays">${pays}</div>` : ''}
+  return `<footer class="lfoot">${SKY}${brand()}
+    ${pays ? `<div class="pays">${pays}</div>` : names ? `<small>${names}</small>` : ''}
     ${channels.length ? `<div class="socials">${channels.map((c) => `<a href="${esc(c.url)}" target="_blank" rel="noopener" aria-label="${esc((CH[c.type] || CH.website)[1])}">${icon((CH[c.type] || CH.website)[0])}</a>`).join('')}</div>` : ''}
-    <a href="#/support" class="btn btn-ghost btn-sm">${icon('support', 'ico-sm')} الدعم والتواصل</a>
-    <small>© ${new Date().getFullYear()} جيمنق ليبيا — جميع الحقوق محفوظة</small>
-    <span class="credit">تطوير <a href="https://wa.me/${CONFIG.DEV_CREDIT.whatsapp}" target="_blank" rel="noopener">${esc(CONFIG.DEV_CREDIT.name)}</a></span></footer>`;
+    <a href="#/support">${icon('support', 'ico-sm')} الدعم والتواصل</a>
+    <small>© ${new Date().getFullYear()} جيمنق ليبيا — تطوير <a href="https://wa.me/${CONFIG.DEV_CREDIT.whatsapp}" target="_blank" rel="noopener">${esc(CONFIG.DEV_CREDIT.name)}</a></small></footer>`;
 }
 function needLogin(next) {
   setTop('inner', 'تسجيل الدخول مطلوب');
@@ -336,14 +347,17 @@ function forgotPage() {
 
 // 4. الرئيسية
 async function home() {
-  setTop('home');
-  view.innerHTML = `<div class="sk" style="height:96px;margin-top:6px;border-radius:28px"></div><div class="sk" style="height:178px;margin-top:16px;border-radius:28px"></div>${skGrid(4)}`;
+  document.body.classList.add('home');
+  view.innerHTML = `<div class="band" style="height:230px"></div><div class="sk" style="height:90px;margin-top:16px"></div>${skGrid(3)}`;
   let cfg, cat;
   try { [cfg, cat] = await Promise.all([loadConfig(), loadCatalog()]); } catch (e) { view.innerHTML = errorState(e.message); return; }
   const s = cfg.settings;
-  const svcs = cat.services;
-  const best = [...svcs].filter((x) => !(x.auto && x.stock === 0) && imgUrl(x.image)).sort((a, b) => b.sold - a.sold || a.order - b.order).slice(0, 10);
-  const offers = svcs.filter((x) => x.discount > 0).slice(0, 10);
+  const svcs = cat.services.filter((x) => !(x.auto && x.stock === 0));
+  const ranked = [...svcs].sort((a, b) => b.sold - a.sold || a.order - b.order);
+  const withImg = ranked.filter((x) => imgUrl(x.image));
+  const featured = withImg[0] || ranked[0];
+  const grid = (withImg.length >= 4 ? withImg : ranked).filter((x) => x !== featured).slice(0, 6);
+  const offers = svcs.filter((x) => x.discount > 0).slice(0, 4);
   const banners = (s.banners || []).filter((b) => imgUrl(b.image));
   const slide = (b) => {
     const href = ctaHref(b.ctaType, b.ctaValue);
@@ -352,21 +366,34 @@ async function home() {
     const text = b.title || b.subtitle;
     return `<div class="b-slide ${text || cta ? 'has-text' : ''}">${imgTag(b.image, b.title)}${text || cta ? `<div class="b-body"><div>${b.title ? `<h3>${esc(b.title)}</h3>` : ''}${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ''}</div>${cta}</div>` : ''}</div>`;
   };
-  const slides = banners.length ? banners.map(slide).join('') : '';
-  const n = banners.length || 1;
+  const n = banners.length;
+  const first = (S.me?.name || '').trim().split(/\s+/)[0];
+  const nCart = cartCount();
+  const cats = cat.categories;
   view.innerHTML = `
-    <a class="searchbar" href="#/search">${icon('search')}<span>ابحث عن لعبة، بطاقة، أو اشتراك...</span></a>
-    ${S.me ? `<div class="balance"><div><small>رصيد المحفظة</small><div class="amt">${money(S.me.balance)}</div></div><a class="btn-add" href="#/wallet">${icon('plus')} شحن</a></div>`
-      : `<div class="balance"><div><small>عندك حساب؟</small><b>سجّل دخولك عشان تشحن</b></div><a class="btn-add" href="#/login">دخول</a></div>`}
-    ${s.announcement ? `<div class="announce">${icon('info')}<span>${esc(s.announcement)}</span></div>` : ''}
-    ${banners.length ? `<div class="banners"><div class="b-track" id="track">${slides}</div>${n > 1 ? `<div class="b-dots">${Array.from({ length: n }, (_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>`
-      : `<div class="b-default"><h3>اشحن ألعابك المفضلة فوراً وبأفضل سعر في ليبيا</h3><p>ادفع بليبيانا أو مدار أو تحويل بنكي، واستلم طلبك في دقائق.</p><a class="btn btn-primary btn-sm" href="#/categories">تصفّح الأقسام</a>
-        <div class="trust"><span>${icon('shield')} دفع آمن</span><span>${icon('clock')} تنفيذ سريع</span><span>${icon('support')} دعم فني</span></div></div>`}
-    <section class="sec"><div class="sec-head"><h2>الأقسام</h2><a href="#/categories">عرض الكل ${icon('forward')}</a></div>
-      ${cat.categories.length ? `<div class="cat-grid reveal">${(cat.categories.length > 8 ? cat.categories.slice(0, 7) : cat.categories).map(catTile).join('')}${cat.categories.length > 8 ? `<a class="cat-tile" href="#/categories"><span class="ci">${icon('more')}</span><span>المزيد</span></a>` : ''}</div>` : '<span class="muted">لا توجد أقسام بعد</span>'}</section>
-    ${best.length ? `<section class="sec"><div class="sec-head"><h2>الأكثر مبيعاً</h2><a href="#/offers?all=1">عرض الكل ${icon('forward')}</a></div><div class="h-scroll">${best.map(pCard).join('')}</div></section>` : ''}
-    ${offers.length ? `<section class="sec"><div class="sec-head"><h2>عروض وخصومات</h2><a href="#/offers">عرض الكل ${icon('forward')}</a></div><div class="h-scroll">${offers.map(pCard).join('')}</div></section>` : ''}
-    ${supportBlock() ? `<section class="sec"><div class="sec-head"><h2>تواصل معنا</h2><a href="#/support">عرض الكل ${icon('forward')}</a></div>${supportBlock()}</section>` : ''}
+    <header class="band"><span class="moon"></span>
+      <div class="bt"><a href="#/home">${brand('GAMING LIBYA').replace('<b>Gaming</b>', '<b>جيمنق ليبيا</b>')}</a>
+        <div class="pills">
+          <a class="pill-ic soft" href="#/notifications" aria-label="الإشعارات">${icon('bell')}${S.me?.unread ? '<i class="dot"></i>' : ''}</a>
+          <a class="pill-ic soft" id="bandCart" href="#/cart" aria-label="السلة">${icon('cart')}<i class="count ${nCart ? '' : 'hidden'}">${nCart}</i></a>
+          <button class="pill-ic soft theme-toggle" data-act="theme" aria-label="الوضع">${icon(isLight() ? 'moon' : 'sun')}</button>
+          ${S.me ? `<a class="bal soft" href="#/wallet"><span class="num">${fmt(S.me.balance)}</span> د.ل<i>${icon('plus')}</i></a>` : `<a class="bal soft" href="#/login">دخول<i>${icon('user')}</i></a>`}
+        </div></div>
+      <div class="greet"><h1>${first ? `أهلاً <em>${esc(first)}</em>، شن تبي تشحن اليوم؟` : 'شن تبي تشحن اليوم؟'}</h1><p>اختار لعبتك، وحط الـ ID، والشحنة توصلك في دقائق.</p></div>
+      <a class="searchbar" href="#/search">${icon('search')}<span>ابحث عن لعبة أو اشتراك</span></a>
+      ${SKY}</header>
+    ${s.announcement ? `<div class="announce">${icon('megaphone')}<span>${esc(s.announcement)}</span></div>` : ''}
+    <section class="sec" style="margin-top:20px"><div class="sec-head"><h2>الألعاب والأقسام</h2><a href="#/categories">الكل ${icon('forward')}</a></div>
+      <div class="launch reveal">${cats.slice(0, 12).map(gmTile).join('')}${cats.length > 12 ? `<a class="gm" href="#/categories"><span class="ic">${icon('more')}</span><span>المزيد</span></a>` : ''}</div></section>
+    ${n ? `<div class="banners"><div class="b-track" id="track">${banners.map(slide).join('')}</div>${n > 1 ? `<div class="b-dots">${banners.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>` : ''}
+    ${featured ? `<section class="sec"><div class="sec-head"><h2>الأكثر طلباً هذا الأسبوع</h2></div>
+      <a class="feat" href="${svcLink(featured)}"><span class="fi">${imgTag(featured.image, featured.title)}</span><div><div><b>${esc(featured.title)}</b><small>${esc(catById(featured.category)?.name || '')}${featured.auto ? ' — تسليم فوري' : ' — يتنفذ خلال دقائق'}</small></div>
+      <div class="pr"><span>${fmt(featured.enableQuantity ? linePrice(featured, featured.qtyMin) : featured.finalPrice)} <em>د.ل</em></span><span class="go soft">اشحن</span></div></div></a></section>` : ''}
+    ${grid.length ? `<section class="sec"><div class="sec-head"><h2>الأكثر مبيعاً</h2><a href="#/offers?all=1">الكل ${icon('forward')}</a></div><div class="grid3 reveal">${grid.map(cvTile).join('')}</div></section>` : ''}
+    ${offers.length ? `<section class="sec"><div class="sec-head"><h2>عروض وخصومات</h2><a href="#/offers">الكل ${icon('forward')}</a></div>
+      <div class="rows reveal">${offers.map((x) => `<a class="rowi" href="${svcLink(x)}"><span class="ri2">${imgTag(x.image, x.title)}</span><div><b>${esc(x.title)}</b><small>خصم <span class="num">${x.discount}%</span> — بدل <s class="num">${fmt(x.price)}</s></small></div><span>${fmt(x.finalPrice)} د.ل</span></a>`).join('')}</div></section>` : ''}
+    ${supportBlock() ? `<section class="sec"><div class="sec-head"><h2>تواصل معنا</h2><a href="#/support">الكل ${icon('forward')}</a></div>${supportBlock()}</section>` : ''}
+    <div class="trust3"><div>${icon('shield')}دفع آمن</div><div>${icon('clock')}تنفيذ سريع</div><div>${icon('support')}دعم ليبي</div></div>
     ${footer()}`;
   if (n > 1) {
     const track = $('#track'), dots = $$('.b-dots i');
@@ -382,7 +409,6 @@ async function home() {
       track.children[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
     }, 5000));
   }
-
 }
 function catTile(c) {
   const vis = c.icon ? icon(c.icon) : imgUrl(c.image) ? imgTag(c.image, c.name) : icon('gamepad');
@@ -404,15 +430,89 @@ async function categoriesPage() {
   listInto(sub, popular.slice(0, 60), { emptyText: 'لا توجد خدمات بعد' });
 }
 
-// 5. صفحة القسم
-async function categoryPage(id) {
-  setTop('inner', '...', `<a class="btn-icon" href="#/search" aria-label="بحث">${icon('search')}</a>`);
-  view.innerHTML = skGrid(6);
-  try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
+// 5. صفحة اللعبة: ID ← الباقة ← الدفع
+async function categoryPage(id, q) {
+  document.body.classList.add('game');
+  view.innerHTML = `<div class="gh"><span class="bg ph"></span></div><div class="sk" style="height:84px;width:84px;margin-top:-40px;border-radius:22px"></div>${skGrid(3)}`;
+  try { await Promise.all([loadCatalog(), loadConfig()]); } catch (e) { view.innerHTML = errorState(e.message); return; }
   const c = catById(id);
   if (!c) return notFound();
-  setTop('inner', c.name, `<a class="btn-icon" href="#/search" aria-label="بحث">${icon('search')}</a>`);
-  listPage(S.cat.services.filter((s) => s.category === id), { emptyText: 'لا توجد خدمات في هذا القسم حالياً' });
+  const list = S.cat.services.filter((x) => x.category === id).sort((a, b) => a.order - b.order || (a.enableQuantity ? linePrice(a, a.qtyMin) : a.finalPrice) - (b.enableQuantity ? linePrice(b, b.qtyMin) : b.finalPrice));
+  const isOut = (x) => x.auto && x.stock === 0;
+  let sel = list.find((x) => x.id === q.get('p')) || list.find((x) => !isOut(x)) || list[0];
+  let qty = sel && sel.enableQuantity ? sel.qtyMin : 1;
+  let inputVal = store.get('gl_id_' + id, '');
+  const cover = imgUrl(c.image) || imgUrl(list.find((x) => imgUrl(x.image))?.image);
+  const anyAuto = list.some((x) => x.auto);
+  view.innerHTML = `<div class="gh"><span class="bg ${cover ? '' : 'ph'}" ${cover ? `style="background-image:url('${esc(cover)}')"` : ''}></span>
+      <div class="gtop"><button class="pill-ic soft" data-act="back" aria-label="رجوع">${icon('back')}</button><a class="pill-ic soft" href="#/cart" aria-label="السلة">${icon('cart')}${cartCount() ? `<i class="count">${cartCount()}</i>` : ''}</a></div></div>
+    <div class="gid"><span class="gic">${c.icon ? icon(c.icon) : imgTag(c.image, c.name)}</span><div><h1>${esc(c.name.trim())}</h1><small>${icon(anyAuto ? 'bolt' : 'clock')} ${anyAuto ? 'تسليم فوري للأكواد' : 'شحن مباشر — يتنفذ خلال دقائق'}</small></div></div>
+    <div id="gsteps">${list.length ? '' : emptyState('box', 'ما فيش باقات هنا حالياً', 'ارجعلنا بعد شوية', '<a class="btn btn-ghost btn-sm" href="#/categories">الألعاب</a>')}</div>`;
+  if (!list.length) return;
+  const priceOf = (x, qn) => linePrice(x, qn);
+  const draw = () => {
+    const [flabel, fph] = FIELD_DEF[sel.fieldType] || FIELD_DEF.id;
+    const label = sel.fieldLabel || flabel;
+    let n = 1;
+    const maxQ = sel.enableQuantity ? sel.qtyMax : sel.auto ? Math.max(1, Math.min(10, sel.stock || 1)) : 10;
+    qty = Math.min(maxQ, Math.max(sel.enableQuantity ? sel.qtyMin : 1, qty));
+    const total = priceOf(sel, qty);
+    const bal = S.me?.balance;
+    $('#gsteps').innerHTML = `
+      ${sel.fieldEnabled ? `<div class="step"><h4><i>${n++}</i>${esc(label)}</h4><input id="ginp" class="input ${sel.fieldType === 'id' || sel.fieldType === 'phone' ? 'ltr' : ''}" maxlength="200" value="${esc(inputVal)}" placeholder="${esc(sel.fieldLabel ? 'أدخل ' + sel.fieldLabel : fph)}" ${sel.fieldType === 'phone' || sel.fieldType === 'id' ? 'inputmode="numeric"' : ''}><div class="hint" style="margin-top:6px">${sel.fieldType === 'id' ? 'تلقاه في البروفايل داخل اللعبة، تحت الاسم.' : 'تأكد من صحة البيانات قبل الدفع.'}</div></div>` : ''}
+      <div class="step"><h4><i>${n++}</i>اختار الباقة</h4><div class="pk ${list.length < 3 ? 'two' : ''}">${list.map((x) => `<button type="button" class="p ${x === sel ? 'on' : ''} ${isOut(x) ? 'out' : ''}" data-act="pick" data-id="${esc(x.id)}"><span class="ck">${icon('check')}</span>${x.discount > 0 ? `<span class="rib">-${x.discount}%</span>` : x.badge ? `<span class="rib">${esc(x.badge)}</span>` : ''}<span class="pt">${esc(x.title)}</span><span class="pp">${isOut(x) ? 'نفذت' : `${x.enableQuantity ? 'من ' : ''}${fmt(x.enableQuantity ? linePrice(x, x.qtyMin) : x.finalPrice)} د.ل`}</span>${x.discount > 0 && !x.enableQuantity ? `<s>${fmt(x.price)}</s>` : ''}</button>`).join('')}</div></div>
+      ${sel.enableQuantity ? `<div class="step"><h4><i>${n++}</i>الكمية <span class="muted" style="font-size:12px">(${sel.qtyMin} - ${sel.qtyMax})</span></h4><input type="range" id="grng" min="${sel.qtyMin}" max="${sel.qtyMax}" value="${qty}" step="1"><input id="gqn" class="input ltr" type="number" inputmode="numeric" min="${sel.qtyMin}" max="${sel.qtyMax}" value="${qty}" style="margin-top:8px"></div>`
+        : maxQ > 1 ? `<div class="qty-row" style="margin-top:16px"><span class="label">الكمية</span><div class="stepper"><button type="button" data-act="gdec" aria-label="إنقاص">${icon('minus')}</button><input id="gqn" class="num" value="${qty}" readonly aria-label="الكمية"><button type="button" data-act="ginc" aria-label="زيادة">${icon('plus')}</button></div></div>` : ''}
+      ${sel.description ? `<div class="desc-note">${esc(sel.description)}</div>` : ''}
+      <div class="paybox"><div><span>${esc(sel.title)}${qty > 1 && !sel.enableQuantity ? ` × <span class="num">${qty}</span>` : ''}</span><span id="gsum">${fmt(total)} د.ل</span></div>
+        ${bal !== undefined && bal !== null ? `<div><span>رصيد محفظتك</span><span>${fmt(bal)} د.ل</span></div>` : ''}
+        <div class="t"><span>تدفع</span><span id="gtot">${fmt(total)} د.ل</span></div></div>
+      <button class="btn btn-primary cta" data-act="gpay" ${isOut(sel) ? 'disabled' : ''}><span class="spin"></span><span class="lbl">${icon('lock')} ${!S.user ? 'سجّل الدخول للشراء' : bal !== undefined && bal < total ? 'رصيدك ما يكفيش — اشحن المحفظة' : `ادفع <b id="gpb">${fmt(total)}</b> د.ل من المحفظة`}</span></button>
+      <div class="g-actions"><button data-act="gcart">${icon('cart', 'ico-sm')} أضف للسلة</button><button class="${S.favs.has(sel.id) ? 'on' : ''}" data-fav="${esc(sel.id)}">${icon('heart', 'ico-sm')} المفضلة</button></div>
+      <div class="secure" style="margin-top:12px">${icon('shield')} الدفع من محفظتك آمن ومشفر</div>`;
+    const inp = $('#ginp');
+    if (inp) inp.addEventListener('input', () => { inputVal = inp.value; store.set('gl_id_' + id, inputVal.trim()); });
+    const upd = () => { const t = priceOf(sel, qty); $('#gsum').textContent = fmt(t) + ' د.ل'; $('#gtot').textContent = fmt(t) + ' د.ل'; const pb = $('#gpb'); if (pb) pb.textContent = fmt(t); };
+    const rng = $('#grng'), qn = $('#gqn');
+    if (rng) rng.addEventListener('input', () => { qty = Number(rng.value); qn.value = qty; upd(); });
+    if (rng && qn) qn.addEventListener('change', () => { qty = Math.min(sel.qtyMax, Math.max(sel.qtyMin, Math.round(Number(qn.value) || sel.qtyMin))); qn.value = qty; rng.value = qty; upd(); });
+  };
+  const collect = () => {
+    const v = sel.fieldEnabled ? ($('#ginp')?.value || '').trim() : '';
+    if (sel.fieldEnabled && v.length < 2) { $('#ginp')?.focus(); toast(`أدخل ${sel.fieldLabel || (FIELD_DEF[sel.fieldType] || FIELD_DEF.id)[0]}`, 'bad'); return null; }
+    return { serviceId: sel.id, qty, input: v };
+  };
+  S.actions.pick = (b) => { const x = list.find((y) => y.id === b.dataset.id); if (!x || x === sel) return; sel = x; qty = x.enableQuantity ? x.qtyMin : 1; draw(); history.replaceState(null, '', `#/category/${encodeURIComponent(id)}?p=${encodeURIComponent(x.id)}`); };
+  S.actions.ginc = () => { qty++; draw(); };
+  S.actions.gdec = () => { qty--; draw(); };
+  S.actions.gcart = () => {
+    const it = collect(); if (!it) return;
+    const same = S.cart.find((x) => x.serviceId === it.serviceId && x.input === it.input && !sel.enableQuantity);
+    if (same) same.qty = Math.min(10, same.qty + it.qty); else S.cart.push({ key: uuid(), ...it });
+    saveCart(); toast('أُضيفت إلى السلة', 'ok', 1600); draw();
+  };
+  S.actions.gpay = async (b) => {
+    if (!S.user) return go(`#/login?next=${encodeURIComponent(`category/${id}?p=${sel.id}`)}`);
+    const it = collect(); if (!it) return;
+    if (!S.me) await loadMe();
+    const total = priceOf(sel, qty);
+    if (S.me && S.me.balance < total) return go('#/wallet');
+    if (b.classList.contains('load')) return;
+    b.classList.add('load');
+    try {
+      const r = await api('/api/orders', { method: 'POST', body: { idem: uuid(), contactPhone: store.get('gl_contact', S.me?.phone || ''), items: [{ serviceId: it.serviceId, quantity: it.qty, input: it.input }] } });
+      S.me.balance = r.balance;
+      loadCatalog(true).catch(() => {});
+      showOrderSuccess(r);
+      draw();
+    } catch (e) {
+      b.classList.remove('load');
+      toast(e.message, 'bad', 5000);
+      if (e.status === 402) loadMe().then(draw);
+      if (e.status === 409) loadCatalog(true).then(() => render()).catch(() => {});
+    }
+  };
+  draw();
 }
 function listPage(items, opts = {}) { listInto(view, items, opts); }
 function listInto(root, items, { emptyText = 'لا توجد نتائج', head = '' } = {}) {
@@ -473,6 +573,12 @@ async function searchPage(q) {
 // 6. تفاصيل الخدمة
 const FIELD_DEF = { id: ['معرّف اللاعب (ID)', 'أدخل الـ ID الخاص بك'], phone: ['رقم الهاتف', '09XXXXXXXX'], account: ['رابط أو اسم الحساب', 'رابط الحساب أو اسم المستخدم'], custom: ['البيانات المطلوبة', 'أدخل البيانات المطلوبة'] };
 async function servicePage(id) {
+  try { await loadCatalog(); } catch {}
+  const x = svcById(id);
+  if (x) { location.replace(svcLink(x)); return; }
+  return servicePageOld(id);
+}
+async function servicePageOld(id) {
   setTop('inner', 'تفاصيل الخدمة');
   view.innerHTML = `<div class="sk" style="aspect-ratio:16/10;border-radius:28px;margin-top:4px"></div><div class="sk" style="height:28px;width:70%;margin-top:18px"></div><div class="sk" style="height:140px;margin-top:18px"></div>`;
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
@@ -577,6 +683,16 @@ async function checkout(items, { fromCart = false } = {}) {
     S.me.balance = r.balance;
     updateChrome();
     loadCatalog(true).catch(() => {});
+    showOrderSuccess(r);
+  } catch (e) {
+    closeSheet();
+    toast(e.message, 'bad', 5000);
+    if (e.status === 402) loadMe();
+    if (e.status === 409) loadCatalog(true).then(() => render()).catch(() => {});
+  }
+}
+function showOrderSuccess(r) {
+    updateChrome();
     const autos = r.orders.filter((o) => o.auto);
     sheet(`<div class="center-t"><div class="success-ic">${icon('check')}</div><h3>${autos.length ? 'تم تسليم طلبك' : 'تم استلام طلبك'}</h3>
       <p class="t2">${autos.length ? 'الكود جاهز في صفحة الطلب' : 'بيتم تنفيذ طلبك خلال دقائق، وبيوصلك إشعار أول ما يتنفذ'}</p>
@@ -585,12 +701,6 @@ async function checkout(items, { fromCart = false } = {}) {
       ${autos.length === 1 ? `<a class="btn btn-primary btn-block" href="#/order/${encodeURIComponent(autos[0].id)}" data-act="cls">عرض الكود</a>` : ''}
       <a class="btn ${autos.length === 1 ? 'btn-soft' : 'btn-primary'} btn-block" href="#/orders" data-act="cls">طلباتي</a></div></div>`, { center: true });
     S.actions.cls = (a) => { closeSheet(); location.hash = a.getAttribute('href'); };
-  } catch (e) {
-    closeSheet();
-    toast(e.message, 'bad', 5000);
-    if (e.status === 402) loadMe();
-    if (e.status === 409) loadCatalog(true).then(() => render()).catch(() => {});
-  }
 }
 
 // 7. السلة
@@ -914,7 +1024,7 @@ function parseHash() {
 const ROUTES = [
   [/^$/, () => (!S.user && !store.get('gl_seen') ? welcome() : home())],
   [/^welcome$/, welcome], [/^home$/, home], [/^login$/, (m, q) => loginPage(q)], [/^signup$/, (m, q) => signupPage(q)], [/^forgot$/, forgotPage],
-  [/^categories$/, categoriesPage], [/^category\/([\w-]+)$/, (m) => categoryPage(m[1])], [/^service\/([\w-]+)$/, (m) => servicePage(m[1])],
+  [/^categories$/, categoriesPage], [/^category\/([\w-]+)$/, (m, q) => categoryPage(m[1], q)], [/^service\/([\w-]+)$/, (m) => servicePage(m[1])],
   [/^search$/, (m, q) => searchPage(q)], [/^offers$/, (m, q) => offersPage(q)], [/^favorites$/, favoritesPage], [/^cart$/, cartPage],
   [/^wallet$/, walletPage], [/^deposit\/(\w+)$/, (m) => depositPage(m[1])], [/^deposits$/, depositsPage],
   [/^account$/, accountPage], [/^profile$/, profilePage], [/^password$/, passwordPage],
@@ -927,7 +1037,7 @@ async function render() {
   S.timers.forEach(clearInterval); S.timers = [];
   S.actions = {};
   closeSheet(); closeDrawer();
-  document.body.classList.remove('bare');
+  document.body.classList.remove('bare', 'home', 'game');
   const { path, q } = parseHash();
   try { await loadConfig(); } catch {}
   if (S.cfg?.settings?.maintenance && !S.me?.admin) { maintenancePage(); return; }
