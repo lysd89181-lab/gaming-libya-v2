@@ -2,8 +2,8 @@ import {
   CONFIG, auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, uuid, captcha, loginWith, signupWith, resetPassword, changePassword, logout,
   onAuthStateChanged, enablePush,
-} from './core.js';
-import { icon, logoMark, brand } from './icons.js';
+} from './core.js?v=202610200431';
+import { icon, logoMark, brand } from './icons.js?v=202610200431';
 
 /* ================= State ================= */
 const S = {
