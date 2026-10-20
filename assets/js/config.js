@@ -1,6 +1,6 @@
 // إعدادات عامة (مش سرية) — رابط الـ Worker وإعدادات Firebase للواجهة
 export const CONFIG = {
-  API_BASE: 'https://gaming-libya-api.REPLACE_ME.workers.dev',
+  API_BASE: 'https://gaming-libya-api.sdkhyrallh08.workers.dev',
   firebase: {
     apiKey: 'AIzaSyAJgwaMBo5wxM5BEK9nRrrNg04UGdHyAV0',
     authDomain: 'zad1-85d66.firebaseapp.com',
