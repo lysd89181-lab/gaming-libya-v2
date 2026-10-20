@@ -1,8 +1,8 @@
 import {
   auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, captcha, loginWith, logout, onAuthStateChanged, enablePush, compressImage,
-} from './core.js?v=202610200540';
-import { icon, brand, CAT_ICONS } from './icons.js?v=202610200540';
+} from './core.js?v=202610200548';
+import { icon, brand, CAT_ICONS } from './icons.js?v=202610200548';
 
 const A = { user: null, cfg: null, tab: 'dash', actions: {}, timers: [], cat: null, stats: null, cap: null };
 const root = $('#root');
@@ -158,7 +158,7 @@ async function dash() {
       <div class="panel"><h3>آخر 7 أيام</h3><table class="tbl"><thead><tr><th>اليوم</th><th>الطلبات</th><th>المبيعات</th><th>الإيداعات</th></tr></thead><tbody>
         ${last7.map((d) => `<tr><td class="num">${d.day.slice(5).replace('-', '/')}</td><td class="num">${d.orders}</td><td class="num">${fmt(d.revenue)}</td><td class="num">${fmt(d.deposits)}</td></tr>`).join('')}</tbody></table></div>
     </div>
-    <div class="panel" style="margin-top:14px"><h3>المبيعات اليومية <small>آخر 30 يوم — د.ل</small></h3>${barChart(s.days, 'revenue')}</div>
+    <div class="panel" style="margin-top:14px"><h3>المبيعات اليومية <small>آخر 30 يوم · د.ل</small></h3>${barChart(s.days, 'revenue')}</div>
     <div class="panels two">
       <div class="panel"><h3>الأكثر مبيعاً <small>30 يوم</small></h3>${s.top.length ? `<table class="tbl"><thead><tr><th>الخدمة</th><th>العدد</th><th>المبيعات</th></tr></thead><tbody>${s.top.map((t) => `<tr><td>${esc(t.title)}</td><td class="num">${t.count}</td><td class="num">${fmt(t.revenue)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">لا توجد بيانات بعد</span>'}</div>
       <div class="panel"><h3>الإيداعات حسب الطريقة <small>30 يوم</small></h3>${s.methods.length ? `<table class="tbl"><thead><tr><th>الطريقة</th><th>المبلغ</th></tr></thead><tbody>${s.methods.map((x) => `<tr><td>${esc(x.label)}</td><td class="num">${fmt(x.value)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">لا توجد بيانات بعد</span>'}</div>
@@ -178,7 +178,7 @@ async function orders() {
   const sel = new Set();
   const draw = () => {
     $('#flt').innerHTML = [['pending', 'معلّقة'], ['completed', 'مكتملة'], ['rejected', 'مرفوضة'], ['all', 'الكل']].map(([k2, t]) => `<button class="chip ${A.ordStatus === k2 ? 'active' : ''}" data-act="st" data-k="${k2}">${t}</button>`).join('') +
-      `<input class="input" id="q" placeholder="بحث: اسم، خدمة، بيانات..." value="${esc(q)}">`;
+      `<input class="input" id="q" placeholder="بحث: اسم خدمة بيانات..." value="${esc(q)}">`;
     const t = q.toLowerCase();
     const list = r.orders.filter((o) => !t || [o.title, o.userName, o.userEmail, o.input, o.id, o.contactPhone].some((v) => String(v || '').toLowerCase().includes(t)));
     $('#list').innerHTML = list.length ? list.map((o) => `<div class="item ${o.status === 'pending' ? 'pending' : ''}">
@@ -199,8 +199,8 @@ async function orders() {
   A.actions.done = async (b) => {
     const o = r.orders.find((x) => x.id === b.dataset.id);
     const v = await confirmSheet({
-      title: 'تنفيذ الطلب', text: `${esc(o.title)} — ${money(o.total)}<br><span class="muted">البيانات: ${esc(o.input)}</span>`, ok: 'تأكيد التنفيذ',
-      inputs: `<div class="form-grid"><div class="field"><label>كود / بيانات التسليم (اختياري — تظهر للعميل مشفّرة)</label><textarea class="textarea" data-in="delivery" maxlength="2000" placeholder="مثال: XXXX-XXXX-XXXX"></textarea></div>
+      title: 'تنفيذ الطلب', text: `${esc(o.title)} · ${money(o.total)}<br><span class="muted">البيانات: ${esc(o.input)}</span>`, ok: 'تأكيد التنفيذ',
+      inputs: `<div class="form-grid"><div class="field"><label>كود / بيانات التسليم (اختياري · تظهر للعميل مشفّرة)</label><textarea class="textarea" data-in="delivery" maxlength="2000" placeholder="مثال: XXXX-XXXX-XXXX"></textarea></div>
         <div class="field"><label>ملاحظة للعميل (اختياري)</label><input class="input" data-in="note" maxlength="300" placeholder="تم الشحن بنجاح"></div></div>`,
     });
     if (!v) return;
@@ -216,7 +216,7 @@ async function orders() {
     try {
       const o = await api('/api/admin/orders/' + encodeURIComponent(b.dataset.id));
       sheet(`<h3>تفاصيل الطلب</h3><div class="tbl-mini" style="margin-top:12px">
-        ${[['رقم الطلب', o.id], ['الخدمة', o.title], ['العميل', `${o.userName} — ${o.userEmail}`], ['البيانات', o.input], ['الكمية', o.quantity], ['المبلغ', fmt(o.total) + ' د.ل'], ['الحالة', o.status], ['التسليم', o.delivery === 'auto' ? 'تلقائي' : 'يدوي'], ['التاريخ', fmtDate(o.createdAt, true)], ['التواصل', o.contactPhone], ['ملاحظة', o.note], ['سبب الرفض', o.reason]].filter(([, v]) => v !== '' && v !== undefined && v !== null).map(([k2, v]) => `<div><span class="muted">${k2}</span><span>${esc(v)}</span></div>`).join('')}</div>
+        ${[['رقم الطلب', o.id], ['الخدمة', o.title], ['العميل', `${o.userName} · ${o.userEmail}`], ['البيانات', o.input], ['الكمية', o.quantity], ['المبلغ', fmt(o.total) + ' د.ل'], ['الحالة', o.status], ['التسليم', o.delivery === 'auto' ? 'تلقائي' : 'يدوي'], ['التاريخ', fmtDate(o.createdAt, true)], ['التواصل', o.contactPhone], ['ملاحظة', o.note], ['سبب الرفض', o.reason]].filter(([, v]) => v !== '' && v !== undefined && v !== null).map(([k2, v]) => `<div><span class="muted">${k2}</span><span>${esc(v)}</span></div>`).join('')}</div>
         ${o.codes.length ? `<h3 style="margin-top:16px">الأكواد المسلّمة</h3><div class="code-list">${o.codes.map((c) => `<div><code>${esc(c)}</code><button class="btn btn-soft btn-xs" data-copy="${esc(c)}">${icon('copy', 'ico-sm')}</button></div>`).join('')}</div>` : ''}
         <button class="btn btn-soft btn-block" style="margin-top:16px" data-act="closeS">إغلاق</button>`, { center: true });
       A.actions.closeS = closeSheet;
@@ -251,8 +251,8 @@ async function deposits() {
   });
   A.actions.ok = async (b) => {
     const d = r.deposits.find((x) => x.id === b.dataset.id);
-    const v = await confirmSheet({ title: 'قبول الإيداع', text: `${esc(d.userName)} — ${esc(d.provider)}`, ok: 'قبول وإضافة',
-      inputs: `<div class="field"><label>المبلغ المضاف للمحفظة (د.ل) — عدّله لو المبلغ المستلم مختلف</label><input class="input ltr" type="number" step="0.01" min="0.01" data-in="amount" value="${d.amount}"></div>` });
+    const v = await confirmSheet({ title: 'قبول الإيداع', text: `${esc(d.userName)} · ${esc(d.provider)}`, ok: 'قبول وإضافة',
+      inputs: `<div class="field"><label>المبلغ المضاف للمحفظة (د.ل) · عدّله لو المبلغ المستلم مختلف</label><input class="input ltr" type="number" step="0.01" min="0.01" data-in="amount" value="${d.amount}"></div>` });
     if (!v) return;
     try { await api(`/api/admin/deposits/${encodeURIComponent(d.id)}/approve`, { method: 'POST', body: { amount: v.amount } }); toast('تمت إضافة الرصيد وإشعار العميل', 'ok'); renderTab(); refreshBadges(); } catch (e) { toast(e.message, 'bad'); }
   };
@@ -393,7 +393,7 @@ async function stockSheet(s) {
   const load = async () => {
     const r = await api(`/api/admin/services/${encodeURIComponent(s.id)}/stock`);
     $('#stk', sh).innerHTML = `<div class="kpis" style="grid-template-columns:1fr 1fr;margin-top:12px"><div class="kpi"><small>متاحة</small><b class="num" style="color:var(--ok)">${r.available}</b></div><div class="kpi"><small>مباعة</small><b class="num">${r.sold}</b></div></div>
-      <div class="field" style="margin-top:14px"><label>إضافة أكواد (كود في كل سطر — الأكواد تُخزّن مشفّرة)</label><textarea class="textarea ltr" id="codes" style="direction:ltr;text-align:left;min-height:130px" placeholder="XXXX-XXXX-XXXX&#10;YYYY-YYYY-YYYY"></textarea></div>
+      <div class="field" style="margin-top:14px"><label>إضافة أكواد (كود في كل سطر · الأكواد تُخزّن مشفّرة)</label><textarea class="textarea ltr" id="codes" style="direction:ltr;text-align:left;min-height:130px" placeholder="XXXX-XXXX-XXXX&#10;YYYY-YYYY-YYYY"></textarea></div>
       <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="addCodes">${icon('plus', 'ico-sm')} إضافة الأكواد</button>
       <h3 style="margin-top:18px;font-size:15px">آخر الأكواد</h3><div class="code-list">${r.codes.map((c) => `<div><code>${esc(c.hint)}</code><span>${c.status === 'available' ? '<span class="badge badge-ok">متاح</span>' : `<span class="badge badge-info">مباع ${timeAgo(c.soldAt)}</span>`}</span>
         ${c.status === 'available' ? `<button class="btn btn-danger btn-xs" data-act="delCode" data-id="${esc(c.id)}">${icon('trash', 'ico-sm')}</button>` : ''}</div>`).join('') || '<span class="muted">لا توجد أكواد بعد</span>'}</div>
@@ -406,7 +406,7 @@ async function stockSheet(s) {
     try {
       let added = 0, dup = 0;
       for (let i = 0; i < codes.length; i += 400) { const x = await api(`/api/admin/services/${encodeURIComponent(s.id)}/stock`, { method: 'POST', body: { codes: codes.slice(i, i + 400) } }); added += x.added; dup += x.duplicates; }
-      toast(`أُضيف ${added} كود${dup ? ` — ${dup} مكرر تم تجاهله` : ''}`, 'ok', 4000); await load();
+      toast(`أُضيف ${added} كود${dup ? ` · ${dup} مكرر تم تجاهله` : ''}`, 'ok', 4000); await load();
     } catch (e) { toast(e.message, 'bad'); }
   });
   A.actions.delCode = async (b) => {
@@ -417,11 +417,11 @@ async function stockSheet(s) {
 
 /* ---------- Users ---------- */
 async function users() {
-  $('#main').innerHTML = top('المستخدمين') + `<div class="filters"><input class="input" id="q" placeholder="بحث: اسم، بريد، هاتف..." style="max-width:360px"></div><p class="muted" id="cnt" style="font-size:13px"></p><div class="items" id="list"><div class="sk" style="height:80px"></div></div>`;
+  $('#main').innerHTML = top('المستخدمين') + `<div class="filters"><input class="input" id="q" placeholder="بحث: اسم بريد هاتف..." style="max-width:360px"></div><p class="muted" id="cnt" style="font-size:13px"></p><div class="items" id="list"><div class="sk" style="height:80px"></div></div>`;
   let timer;
   const load = async (q = '') => {
     const r = await api('/api/admin/users?q=' + encodeURIComponent(q));
-    $('#cnt').textContent = `إجمالي المستخدمين: ${r.total}${q ? ` — النتائج: ${r.users.length}` : ''}`;
+    $('#cnt').textContent = `إجمالي المستخدمين: ${r.total}${q ? ` · النتائج: ${r.users.length}` : ''}`;
     $('#list').innerHTML = r.users.length ? r.users.map((u) => `<button class="svc-row" style="text-align:right;width:100%" data-act="user" data-id="${esc(u.uid)}"><span class="avatar" style="width:46px;height:46px">${esc((u.name || '?').charAt(0))}</span>
       <div style="min-width:0"><b>${esc(u.name || '—')} ${u.blocked ? '<span class="badge badge-bad">موقوف</span>' : ''}</b><small class="muted" style="direction:ltr;display:block;text-align:right">${esc(u.email)} ${u.phone ? '• ' + esc(u.phone) : ''}</small></div>
       <div class="o-side" style="display:grid;justify-items:end"><b class="gold">${money(u.balance)}</b><small class="muted">${fmtDate(u.createdAt)}</small></div></button>`).join('')
@@ -476,7 +476,7 @@ async function notify() {
     <div class="form-grid"><div class="field"><label>العنوان</label><input class="input" id="nt" maxlength="80" placeholder="عرض خاص"></div>
     <div class="field"><label>النص</label><textarea class="textarea" id="nb" maxlength="400" placeholder="خصم 20% على بطاقات Xbox لفترة محدودة"></textarea></div>
     <button class="btn btn-primary" data-act="send">${icon('send', 'ico-sm')} إرسال للجميع</button>
-    <span class="hint">يظهر في صفحة الإشعارات لكل العملاء، ويصل كإشعار جوال لمن فعّل الإشعارات.</span></div></div>`;
+    <span class="hint">يظهر في صفحة الإشعارات لكل العملاء ويصل كإشعار جوال لمن فعّل الإشعارات.</span></div></div>`;
   A.actions.send = (b) => busy(b, async () => {
     const title = $('#nt').value.trim(), body = $('#nb').value.trim();
     if (title.length < 2 || body.length < 2) return toast('أكمل العنوان والنص', 'bad');
@@ -511,7 +511,7 @@ async function settings() {
   const chRow = (c, i) => `<div class="repeat-row" data-ch="${i}"><div class="rr">${sel(chOpts, c.type || 'website', 'data-c="type"')}<input class="input" data-c="label" maxlength="30" placeholder="الاسم (اختياري)" value="${esc(c.label || '')}"></div>
     <div style="display:flex;gap:8px"><input class="input ltr" data-c="url" maxlength="300" placeholder="https://..." value="${esc(c.url || '')}"><button class="btn btn-danger btn-xs" style="height:48px" data-act="rmCh" data-i="${i}">${icon('trash', 'ico-sm')}</button></div></div>`;
   $('#main').innerHTML = top('الإعدادات', `<button class="btn btn-primary btn-sm" data-act="save">${icon('check', 'ico-sm')} حفظ</button>`) + `<div class="panels" id="sf">
-    <div class="panel"><h3>البانرات الإعلانية <small>حتى 8 — يتبدلوا تلقائياً ويتسحبوا باليد</small></h3><div class="form-grid" id="banners"></div>
+    <div class="panel"><h3>البانرات الإعلانية <small>حتى 8 · يتبدلوا تلقائياً ويتسحبوا باليد</small></h3><div class="form-grid" id="banners"></div>
       <button class="btn btn-ghost btn-sm" data-act="addBanner" style="margin-top:12px">${icon('plus', 'ico-sm')} إضافة بانر</button></div>
     <div class="panel"><h3>الدعم والتواصل</h3>
       <div class="label" style="margin-bottom:8px">أرقام الدعم</div><div class="form-grid" id="phones"></div>
@@ -530,7 +530,7 @@ async function settings() {
       <div class="field"><label>شريط إعلان (اختياري)</label><input class="input" data-in="announcement" maxlength="200" value="${esc(s.announcement)}" placeholder="مثال: الطلبات تتنفذ من 9 الصبح لين 2 الليل"></div>
       <label class="toggle-row"><span><b>وضع الصيانة</b><small>المتجر يعرض صفحة الصيانة ويوقف الطلبات والإيداعات</small></span><span class="switch"><input type="checkbox" data-in="maintenance" ${s.maintenance ? 'checked' : ''}></span></label>
       <div class="field"><label>رسالة الصيانة</label><input class="input" data-in="maintenanceMsg" maxlength="300" value="${esc(s.maintenanceMsg)}"></div>
-      <div class="field"><label>وقت العودة المتوقع (توقيت ليبيا — اختياري)</label><input class="input ltr" type="datetime-local" data-in="maintenanceUntil" value="${untilLocal}"></div></div></div></div>
+      <div class="field"><label>وقت العودة المتوقع (توقيت ليبيا · اختياري)</label><input class="input ltr" type="datetime-local" data-in="maintenanceUntil" value="${untilLocal}"></div></div></div></div>
     <button class="btn btn-primary btn-block" style="margin-top:16px" data-act="save">${icon('check')} حفظ الإعدادات</button>`;
   const collectBanners = () => $$('[data-banner]').map((el) => {
     const v = (k) => $(`[data-b="${k}"]`, el).value.trim();
@@ -539,7 +539,7 @@ async function settings() {
   const collectPhones = () => $$('[data-phone]').map((el) => ({ label: $('[data-p="label"]', el).value.trim(), number: $('[data-p="number"]', el).value.trim(), whatsapp: $('[data-p="whatsapp"]', el).checked, call: $('[data-p="call"]', el).checked }));
   const collectCh = () => $$('[data-ch]').map((el) => ({ type: $('[data-c="type"]', el).value, label: $('[data-c="label"]', el).value.trim(), url: $('[data-c="url"]', el).value.trim() }));
   const drawB = () => {
-    $('#banners').innerHTML = banners.map(bannerRow).join('') || '<span class="muted">ما فيش بانرات — يظهر بانر نصي افتراضي</span>';
+    $('#banners').innerHTML = banners.map(bannerRow).join('') || '<span class="muted">ما فيش بانرات · يظهر بانر نصي افتراضي</span>';
     bindUploaders($('#banners'));
     $$('[data-b="ctaType"]').forEach((sl) => sl.addEventListener('change', () => { $('[data-b="ctaValue"]', sl.closest('[data-banner]')).placeholder = ctaPh[sl.value] || ''; }));
   };

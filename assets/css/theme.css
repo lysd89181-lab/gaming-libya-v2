@@ -62,9 +62,9 @@
   --page-x: 16px;
   --r-sm: 10px; --r: 14px; --r-lg: 20px;
   --fs-xs: 12px; --fs-sm: 13.5px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 19px; --fs-2xl: 24px; --fs-3xl: 28px;
-  --font: 'IBM Plex Sans Arabic', 'Alexandria', system-ui, sans-serif;
-  --font-head: 'Alexandria', 'IBM Plex Sans Arabic', sans-serif;
-  --font-num: 'Alexandria', 'IBM Plex Sans Arabic', sans-serif;
+  --font: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-head: 'Changa', 'IBM Plex Sans Arabic', sans-serif;
+  --font-num: 'Changa', 'IBM Plex Sans Arabic', sans-serif;
   --h-btn: 50px; --h-field: 48px; --h-chip: 38px; --h-btn-sm: 38px;
   --ease: cubic-bezier(.2, .8, .2, 1);
   --spring: cubic-bezier(.34, 1.56, .64, 1);
@@ -116,7 +116,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; border: 0; background: none; padding: 0; }
 :focus { outline: none; }
 :focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--gold-3); border-radius: var(--r-sm); }
-h1, h2, h3, .head { font-family: var(--font-head); font-weight: 600; line-height: 1.45; }
+h1, h2, h3, h4, .head { font-family: var(--font-head); font-weight: 700; line-height: 1.4; letter-spacing: 0; }
 b, strong { font-weight: 600; }
 .num { direction: ltr; unicode-bidi: isolate; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
 .ltr { direction: ltr; unicode-bidi: isolate; }

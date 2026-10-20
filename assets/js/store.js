@@ -2,8 +2,8 @@ import {
   CONFIG, auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, uuid, captcha, loginWith, signupWith, resetPassword, changePassword, logout,
   onAuthStateChanged, enablePush,
-} from './core.js?v=202610200540';
-import { icon, logoMark, brand, SKY } from './icons.js?v=202610200540';
+} from './core.js?v=202610200548';
+import { icon, logoMark, brand, SKY } from './icons.js?v=202610200548';
 
 /* ================= State ================= */
 const S = {
@@ -167,7 +167,7 @@ function supportBlock() {
   const items = [];
   for (const p of phones) {
     if (p.whatsapp) items.push(`<a class="sup-item" href="${esc(waLink(p.number))}" target="_blank" rel="noopener"><span class="si">${icon('whatsapp')}</span><span style="min-width:0"><b>${esc(p.label || 'واتساب')}</b><small class="num">${esc(p.number)}</small></span></a>`);
-    if (p.call) items.push(`<a class="sup-item" href="tel:${esc(p.number.replace(/[^\d+]/g, ''))}"><span class="si">${icon('call')}</span><span style="min-width:0"><b>${esc(p.label ? 'اتصال — ' + p.label : 'اتصال')}</b><small class="num">${esc(p.number)}</small></span></a>`);
+    if (p.call) items.push(`<a class="sup-item" href="tel:${esc(p.number.replace(/[^\d+]/g, ''))}"><span class="si">${icon('call')}</span><span style="min-width:0"><b>${esc(p.label ? 'اتصال · ' + p.label : 'اتصال')}</b><small class="num">${esc(p.number)}</small></span></a>`);
   }
   for (const c of channels) {
     const [ic, name] = CH[c.type] || CH.website;
@@ -178,17 +178,22 @@ function supportBlock() {
 
 /* ================= Shared UI ================= */
 function priceHtml(s) {
-  if (s.enableQuantity) return `<b><small class="cur">من</small> <span class="num">${fmt(linePrice(s, s.qtyMin))}</span> <span class="cur">د.ل</span></b>`;
+  if (s.enableQuantity) return `<b><span class="cur">حسب الكمية</span></b>`;
   return `<b><span class="num">${fmt(s.finalPrice)}</span> <span class="cur">د.ل</span></b>${s.discount > 0 ? `<s class="num">${fmt(s.price)}</s>` : ''}`;
 }
 const svcLink = (s) => `#/category/${encodeURIComponent(s.category)}?p=${encodeURIComponent(s.id)}`;
+function catCard2(c) {
+  const n = (S.cat?.services || []).filter((x) => x.category === c.id).length;
+  const vis = imgUrl(c.image) ? imgTag(c.image, c.name) : icon(c.icon || 'gamepad');
+  return `<a class="cc" href="#/category/${encodeURIComponent(c.id)}"><span class="cm">${vis}</span><span class="cl"><b>${esc(c.name.trim())}</b><small><span class="num">${n}</span> ${n === 1 ? 'منتج' : n === 2 ? 'منتجين' : n <= 10 ? 'منتجات' : 'منتج'}</small></span></a>`;
+}
 function gmTile(c) {
   const vis = c.icon ? icon(c.icon) : imgTag(c.image, c.name);
   return `<a class="gm" href="#/category/${encodeURIComponent(c.id)}"><span class="ic">${vis}</span><span>${esc(c.name.trim())}</span></a>`;
 }
 function cvTile(s) {
   const out = s.auto && s.stock === 0;
-  return `<a class="cv" href="${svcLink(s)}"><span class="im">${imgTag(s.image, s.title)}${s.discount > 0 ? `<i class="off">-${s.discount}%</i>` : ''}${s.auto && !out ? `<i class="fast">${icon('bolt')}</i>` : ''}</span><b>${esc(s.title)}</b><small>${out ? 'نفذت الكمية' : `${s.enableQuantity ? 'من ' : ''}${fmt(s.enableQuantity ? linePrice(s, s.qtyMin) : s.finalPrice)} د.ل`}</small></a>`;
+  return `<a class="cv" href="${svcLink(s)}"><span class="im">${imgTag(s.image, s.title)}${s.discount > 0 ? `<i class="off">-${s.discount}%</i>` : ''}${s.auto && !out ? `<i class="fast">${icon('bolt')}</i>` : ''}</span><b>${esc(s.title)}</b><small>${out ? 'نفذت الكمية' : s.enableQuantity ? 'حسب الكمية' : `${fmt(s.finalPrice)} د.ل`}</small></a>`;
 }
 function pCard(s) {
   const out = s.auto && s.stock === 0;
@@ -217,11 +222,11 @@ function footer() {
   const pays = Object.entries(st.payments || {}).filter(([, p]) => p.enabled && imgUrl(p.image)).map(([k]) => pmIco(k)).join('');
   const names = Object.values(st.payments || {}).filter((p) => p.enabled).map((p) => esc(p.label)).join(' • ');
   const { channels } = supportData();
-  return `<footer class="lfoot">${SKY}${brand()}
+  return `<footer class="lfoot">${brand()}
     ${pays ? `<div class="pays">${pays}</div>` : names ? `<small>${names}</small>` : ''}
     ${channels.length ? `<div class="socials">${channels.map((c) => `<a href="${esc(c.url)}" target="_blank" rel="noopener" aria-label="${esc((CH[c.type] || CH.website)[1])}">${icon((CH[c.type] || CH.website)[0])}</a>`).join('')}</div>` : ''}
     <a href="#/support">${icon('support', 'ico-sm')} الدعم والتواصل</a>
-    <small>© ${new Date().getFullYear()} جيمنق ليبيا — تطوير <a href="https://wa.me/${CONFIG.DEV_CREDIT.whatsapp}" target="_blank" rel="noopener">${esc(CONFIG.DEV_CREDIT.name)}</a></small></footer>`;
+    <small>© ${new Date().getFullYear()} جيمنق ليبيا · تطوير <a href="https://wa.me/${CONFIG.DEV_CREDIT.whatsapp}" target="_blank" rel="noopener">${esc(CONFIG.DEV_CREDIT.name)}</a></small></footer>`;
 }
 function needLogin(next) {
   setTop('inner', 'تسجيل الدخول مطلوب');
@@ -235,8 +240,8 @@ function welcome() {
   document.body.classList.add('bare');
   view.innerHTML = `<section class="welcome"><div class="top">${brand()}
     <h1>اشحن ألعابك واشتراكاتك<br>بالدينار الليبي</h1>
-    <p>شدات ببجي، جواهر فري فاير، بطاقات بلايستيشن وأكثر.</p>
-    <ul><li>${icon('check')} الدفع بليبيانا، مدار، والتحويل البنكي</li><li>${icon('check')} أكواد بطاقات تصلك مباشرة بعد الدفع</li><li>${icon('check')} دعم فني عبر واتساب</li></ul></div>
+    <p>شدات ببجي جواهر فري فاير بطاقات بلايستيشن وأكثر.</p>
+    <ul><li>${icon('check')} الدفع بليبيانا مدار والتحويل البنكي</li><li>${icon('check')} أكواد بطاقات تصلك مباشرة بعد الدفع</li><li>${icon('check')} دعم فني عبر واتساب</li></ul></div>
     <div class="actions"><a class="btn btn-primary btn-block" href="#/login" data-act="seen">تسجيل الدخول</a>
     <a class="btn btn-ghost btn-block" href="#/signup" data-act="seen">إنشاء حساب جديد</a>
     <a class="btn btn-block" style="color:var(--text-2);height:40px" href="#/home" data-act="seen">تصفّح المتجر بدون حساب</a></div></section>`;
@@ -330,7 +335,7 @@ function forgotPage() {
       <div class="input-wrap">${icon('mail')}<input class="input has-ico ltr" name="email" type="email" autocomplete="email" placeholder="example@domain.com" required maxlength="100"></div>
       <button class="btn btn-primary btn-block" type="submit">إرسال الرابط</button>
     </form>
-    <p class="hint" style="margin-top:16px">ستصلك رسالة خلال دقائق. لو ما لقيتهاش، شوف مجلد الرسائل المزعجة (Spam).</p></section>`;
+    <p class="hint" style="margin-top:16px">ستصلك رسالة خلال دقائق. لو ما لقيتهاش شوف مجلد الرسائل المزعجة (Spam).</p></section>`;
   const f = $('#f');
   f.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -338,7 +343,7 @@ function forgotPage() {
       const em = f.email.value.trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) return toast('البريد الإلكتروني غير صحيح', 'bad');
       try { await resetPassword(em); } catch {}
-      sheet(`<div class="center-t"><div class="success-ic">${icon('mail')}</div><h3>تحقق من بريدك</h3><p class="t2">إذا كان البريد مسجلاً لدينا، ستصلك رسالة بها رابط إعادة التعيين.</p>
+      sheet(`<div class="center-t"><div class="success-ic">${icon('mail')}</div><h3>تحقق من بريدك</h3><p class="t2">إذا كان البريد مسجلاً لدينا ستصلك رسالة بها رابط إعادة التعيين.</p>
         <a class="btn btn-primary btn-block" href="#/login" data-act="cls" style="margin-top:12px">العودة لتسجيل الدخول</a></div>`, { center: true });
       S.actions.cls = () => { closeSheet(); go('#/login'); };
     });
@@ -371,7 +376,7 @@ async function home() {
   const nCart = cartCount();
   const cats = cat.categories;
   view.innerHTML = `
-    <header class="band"><span class="moon"></span>
+    <header class="band">
       <div class="bt"><a href="#/home">${brand('GAMING LIBYA').replace('<b>Gaming</b>', '<b>جيمنق ليبيا</b>')}</a>
         <div class="pills">
           <a class="pill-ic soft" href="#/notifications" aria-label="الإشعارات">${icon('bell')}${S.me?.unread ? '<i class="dot"></i>' : ''}</a>
@@ -379,19 +384,19 @@ async function home() {
           <button class="pill-ic soft theme-toggle" data-act="theme" aria-label="الوضع">${icon(isLight() ? 'moon' : 'sun')}</button>
           ${S.me ? `<a class="bal soft" href="#/wallet"><span class="num">${fmt(S.me.balance)}</span> د.ل<i>${icon('plus')}</i></a>` : `<a class="bal soft" href="#/login">دخول<i>${icon('user')}</i></a>`}
         </div></div>
-      <div class="greet"><h1>${first ? `أهلاً <em>${esc(first)}</em>، شن تبي تشحن اليوم؟` : 'شن تبي تشحن اليوم؟'}</h1><p>اختار لعبتك، وحط الـ ID، والشحنة توصلك في دقائق.</p></div>
-      <a class="searchbar" href="#/search">${icon('search')}<span>ابحث عن لعبة أو اشتراك</span></a>
-      ${SKY}</header>
+      <div class="greet"><h1>${first ? `أهلاً <em>${esc(first)}</em>` : 'أهلاً بيك'}</h1><p>اشحن لعبتك بكل أريحية</p></div>
+      <a class="searchbar" href="#/search">${icon('search')}<span>ابحث عن لعبة أو اشتراك</span></a></header>
     ${s.announcement ? `<div class="announce">${icon('megaphone')}<span>${esc(s.announcement)}</span></div>` : ''}
-    <section class="sec" style="margin-top:20px"><div class="sec-head"><h2>الألعاب والأقسام</h2><a href="#/categories">الكل ${icon('forward')}</a></div>
-      <div class="launch reveal">${cats.slice(0, 12).map(gmTile).join('')}${cats.length > 12 ? `<a class="gm" href="#/categories"><span class="ic">${icon('more')}</span><span>المزيد</span></a>` : ''}</div></section>
     ${n ? `<div class="banners"><div class="b-track" id="track">${banners.map(slide).join('')}</div>${n > 1 ? `<div class="b-dots">${banners.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>` : ''}
+    <section class="sec"><div class="sec-head"><h2>الألعاب والأقسام</h2><a href="#/categories">عرض الكل</a></div>
+      <div class="cat2 reveal">${cats.slice(0, 6).map(catCard2).join('')}</div>
+      ${cats.length > 6 ? `<a class="btn btn-ghost btn-block" style="margin-top:16px" href="#/categories">كل الأقسام <span class="num">(${cats.length})</span></a>` : ''}</section>
     ${featured ? `<section class="sec"><div class="sec-head"><h2>الأكثر طلباً هذا الأسبوع</h2></div>
-      <a class="feat" href="${svcLink(featured)}"><span class="fi">${imgTag(featured.image, featured.title)}</span><div><div><b>${esc(featured.title)}</b><small>${esc(catById(featured.category)?.name || '')}${featured.auto ? ' — تسليم فوري' : ' — يتنفذ خلال دقائق'}</small></div>
-      <div class="pr"><span>${fmt(featured.enableQuantity ? linePrice(featured, featured.qtyMin) : featured.finalPrice)} <em>د.ل</em></span><span class="go soft">اشحن</span></div></div></a></section>` : ''}
+      <a class="feat" href="${svcLink(featured)}"><span class="fi">${imgTag(featured.image, featured.title)}</span><div><div><b>${esc(featured.title)}</b><small>${esc(catById(featured.category)?.name || '')}</small></div>
+      <div class="pr"><span>${featured.enableQuantity ? '<em>حسب الكمية</em>' : `${fmt(featured.finalPrice)} <em>د.ل</em>`}</span><span class="go soft">اشحن</span></div></div></a></section>` : ''}
     ${grid.length ? `<section class="sec"><div class="sec-head"><h2>الأكثر مبيعاً</h2><a href="#/offers?all=1">الكل ${icon('forward')}</a></div><div class="grid3 reveal">${grid.map(cvTile).join('')}</div></section>` : ''}
     ${offers.length ? `<section class="sec"><div class="sec-head"><h2>عروض وخصومات</h2><a href="#/offers">الكل ${icon('forward')}</a></div>
-      <div class="rows reveal">${offers.map((x) => `<a class="rowi" href="${svcLink(x)}"><span class="ri2">${imgTag(x.image, x.title)}</span><div><b>${esc(x.title)}</b><small>خصم <span class="num">${x.discount}%</span> — بدل <s class="num">${fmt(x.price)}</s></small></div><span>${fmt(x.finalPrice)} د.ل</span></a>`).join('')}</div></section>` : ''}
+      <div class="rows reveal">${offers.map((x) => `<a class="rowi" href="${svcLink(x)}"><span class="ri2">${imgTag(x.image, x.title)}</span><div><b>${esc(x.title)}</b><small>خصم <span class="num">${x.discount}%</span> · بدل <s class="num">${fmt(x.price)}</s></small></div><span>${fmt(x.finalPrice)} د.ل</span></a>`).join('')}</div></section>` : ''}
     ${supportBlock() ? `<section class="sec"><div class="sec-head"><h2>تواصل معنا</h2><a href="#/support">الكل ${icon('forward')}</a></div>${supportBlock()}</section>` : ''}
     <div class="trust3"><div>${icon('shield')}دفع آمن</div><div>${icon('clock')}تنفيذ سريع</div><div>${icon('support')}دعم ليبي</div></div>
     ${footer()}`;
@@ -417,12 +422,12 @@ function catTile(c) {
 
 // كل الأقسام
 async function categoriesPage() {
-  setTop('inner', 'الأقسام', `<a class="btn-icon" href="#/search" aria-label="بحث">${icon('search')}</a>`);
+  setTop('inner', '', `<a class="btn-icon" href="#/search" aria-label="بحث">${icon('search')}</a>`);
   view.innerHTML = skGrid(6);
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
   if (!S.cat.categories.length) { view.innerHTML = emptyState('grid', 'لا توجد أقسام بعد', 'الأقسام بتظهر هنا أول ما تنضاف', '<a class="btn btn-primary btn-sm" href="#/home">الرئيسية</a>'); return; }
   const popular = [...S.cat.services].sort((a, b) => b.sold - a.sold || a.order - b.order);
-  view.innerHTML = `<div class="cat-grid c3 reveal" style="margin-top:8px">${S.cat.categories.map(catTile).join('')}</div>
+  view.innerHTML = `<h1 class="page-title">الألعاب والأقسام</h1><div class="cat2 reveal">${S.cat.categories.map(catCard2).join('')}</div>
     <section class="sec"><div class="sec-head"><h2>أشهر الخدمات</h2></div><div id="pop"></div></section>`;
   const holder = $('#pop');
   const sub = document.createElement('div');
@@ -446,7 +451,7 @@ async function categoryPage(id, q) {
   const anyAuto = list.some((x) => x.auto);
   view.innerHTML = `<div class="gh"><span class="bg ${cover ? '' : 'ph'}" ${cover ? `style="background-image:url('${esc(cover)}')"` : ''}></span>
       <div class="gtop"><button class="pill-ic soft" data-act="back" aria-label="رجوع">${icon('back')}</button><a class="pill-ic soft" href="#/cart" aria-label="السلة">${icon('cart')}${cartCount() ? `<i class="count">${cartCount()}</i>` : ''}</a></div></div>
-    <div class="gid"><span class="gic">${c.icon ? icon(c.icon) : imgTag(c.image, c.name)}</span><div><h1>${esc(c.name.trim())}</h1><small>${icon(anyAuto ? 'bolt' : 'clock')} ${anyAuto ? 'تسليم فوري للأكواد' : 'شحن مباشر — يتنفذ خلال دقائق'}</small></div></div>
+    <div class="gid"><span class="gic">${c.icon ? icon(c.icon) : imgTag(c.image, c.name)}</span><div><h1>${esc(c.name.trim())}</h1><small>${icon(anyAuto ? 'bolt' : 'clock')} ${anyAuto ? 'تسليم فوري للأكواد' : 'شحن مباشر · يتنفذ خلال دقائق'}</small></div></div>
     <div id="gsteps">${list.length ? '' : emptyState('box', 'ما فيش باقات هنا حالياً', 'ارجعلنا بعد شوية', '<a class="btn btn-ghost btn-sm" href="#/categories">الألعاب</a>')}</div>`;
   if (!list.length) return;
   const priceOf = (x, qn) => linePrice(x, qn);
@@ -459,15 +464,15 @@ async function categoryPage(id, q) {
     const total = priceOf(sel, qty);
     const bal = S.me?.balance;
     $('#gsteps').innerHTML = `
-      ${sel.fieldEnabled ? `<div class="step"><h4><i>${n++}</i>${esc(label)}</h4><input id="ginp" class="input ${sel.fieldType === 'id' || sel.fieldType === 'phone' ? 'ltr' : ''}" maxlength="200" value="${esc(inputVal)}" placeholder="${esc(sel.fieldLabel ? 'أدخل ' + sel.fieldLabel : fph)}" ${sel.fieldType === 'phone' || sel.fieldType === 'id' ? 'inputmode="numeric"' : ''}><div class="hint" style="margin-top:6px">${sel.fieldType === 'id' ? 'تلقاه في البروفايل داخل اللعبة، تحت الاسم.' : 'تأكد من صحة البيانات قبل الدفع.'}</div></div>` : ''}
-      <div class="step"><h4><i>${n++}</i>اختار الباقة</h4><div class="pk ${list.length < 3 ? 'two' : ''}">${list.map((x) => `<button type="button" class="p ${x === sel ? 'on' : ''} ${isOut(x) ? 'out' : ''}" data-act="pick" data-id="${esc(x.id)}"><span class="ck">${icon('check')}</span>${x.discount > 0 ? `<span class="rib">-${x.discount}%</span>` : x.badge ? `<span class="rib">${esc(x.badge)}</span>` : ''}<span class="pt">${esc(x.title)}</span><span class="pp">${isOut(x) ? 'نفذت' : `${x.enableQuantity ? 'من ' : ''}${fmt(x.enableQuantity ? linePrice(x, x.qtyMin) : x.finalPrice)} د.ل`}</span>${x.discount > 0 && !x.enableQuantity ? `<s>${fmt(x.price)}</s>` : ''}</button>`).join('')}</div></div>
+      ${sel.fieldEnabled ? `<div class="step"><h4><i>${n++}</i>${esc(label)}</h4><input id="ginp" class="input ${sel.fieldType === 'id' || sel.fieldType === 'phone' ? 'ltr' : ''}" maxlength="200" value="${esc(inputVal)}" placeholder="${esc(sel.fieldLabel ? 'أدخل ' + sel.fieldLabel : fph)}" ${sel.fieldType === 'phone' || sel.fieldType === 'id' ? 'inputmode="numeric"' : ''}><div class="hint" style="margin-top:6px">${sel.fieldType === 'id' ? 'تلقاه في البروفايل داخل اللعبة تحت الاسم.' : 'تأكد من صحة البيانات قبل الدفع.'}</div></div>` : ''}
+      <div class="step"><h4><i>${n++}</i>اختار الباقة</h4><div class="pk ${list.length < 3 ? 'two' : ''}">${list.map((x) => `<button type="button" class="p ${x === sel ? 'on' : ''} ${isOut(x) ? 'out' : ''}" data-act="pick" data-id="${esc(x.id)}"><span class="ck">${icon('check')}</span>${x.discount > 0 ? `<span class="rib">-${x.discount}%</span>` : x.badge ? `<span class="rib">${esc(x.badge)}</span>` : ''}<span class="pt">${esc(x.title)}</span><span class="pp">${isOut(x) ? 'نفذت' : x.enableQuantity ? 'حسب الكمية' : `${fmt(x.finalPrice)} د.ل`}</span>${x.discount > 0 && !x.enableQuantity ? `<s>${fmt(x.price)}</s>` : ''}</button>`).join('')}</div></div>
       ${sel.enableQuantity ? `<div class="step"><h4><i>${n++}</i>الكمية <span class="muted" style="font-size:12px">(${sel.qtyMin} - ${sel.qtyMax})</span></h4><input type="range" id="grng" min="${sel.qtyMin}" max="${sel.qtyMax}" value="${qty}" step="1"><input id="gqn" class="input ltr" type="number" inputmode="numeric" min="${sel.qtyMin}" max="${sel.qtyMax}" value="${qty}" style="margin-top:8px"></div>`
         : maxQ > 1 ? `<div class="qty-row" style="margin-top:16px"><span class="label">الكمية</span><div class="stepper"><button type="button" data-act="gdec" aria-label="إنقاص">${icon('minus')}</button><input id="gqn" class="num" value="${qty}" readonly aria-label="الكمية"><button type="button" data-act="ginc" aria-label="زيادة">${icon('plus')}</button></div></div>` : ''}
       ${sel.description ? `<div class="desc-note">${esc(sel.description)}</div>` : ''}
       <div class="paybox"><div><span>${esc(sel.title)}${qty > 1 && !sel.enableQuantity ? ` × <span class="num">${qty}</span>` : ''}</span><span id="gsum">${fmt(total)} د.ل</span></div>
         ${bal !== undefined && bal !== null ? `<div><span>رصيد محفظتك</span><span>${fmt(bal)} د.ل</span></div>` : ''}
         <div class="t"><span>تدفع</span><span id="gtot">${fmt(total)} د.ل</span></div></div>
-      <button class="btn btn-primary cta" data-act="gpay" ${isOut(sel) ? 'disabled' : ''}><span class="spin"></span><span class="lbl">${icon('lock')} ${!S.user ? 'سجّل الدخول للشراء' : bal !== undefined && bal < total ? 'رصيدك ما يكفيش — اشحن المحفظة' : `ادفع <b id="gpb">${fmt(total)}</b> د.ل من المحفظة`}</span></button>
+      <button class="btn btn-primary cta" data-act="gpay" ${isOut(sel) ? 'disabled' : ''}><span class="spin"></span><span class="lbl">${icon('lock')} ${!S.user ? 'سجّل الدخول للشراء' : bal !== undefined && bal < total ? 'رصيدك ما يكفيش · اشحن المحفظة' : `ادفع <b id="gpb">${fmt(total)}</b> د.ل من المحفظة`}</span></button>
       <div class="g-actions"><button data-act="gcart">${icon('cart', 'ico-sm')} أضف للسلة</button><button class="${S.favs.has(sel.id) ? 'on' : ''}" data-fav="${esc(sel.id)}">${icon('heart', 'ico-sm')} المفضلة</button></div>
       <div class="secure" style="margin-top:12px">${icon('shield')} الدفع من محفظتك آمن ومشفر</div>`;
     const inp = $('#ginp');
@@ -543,7 +548,7 @@ async function offersPage(q) {
   view.innerHTML = skGrid(4);
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
   if (all) return listPage([...S.cat.services].sort((a, b) => b.sold - a.sold), { emptyText: 'لا توجد خدمات بعد' });
-  listPage(S.cat.services.filter((s) => s.discount > 0), { emptyText: 'لا توجد عروض حالياً، تابعنا قريباً' });
+  listPage(S.cat.services.filter((s) => s.discount > 0), { emptyText: 'لا توجد عروض حالياً تابعنا قريباً' });
 }
 async function favoritesPage() {
   setTop('inner', 'المفضلة');
@@ -600,7 +605,7 @@ async function servicePageOld(id) {
     <div class="svc-price">${s.enableQuantity ? `<b><span class="num" id="unitP">${fmt(linePrice(s, s.qtyMin))}</span> <span class="cur">د.ل / ${s.qtyMin}</span></b>` : `<b><span class="num">${fmt(s.finalPrice)}</span> <span class="cur">د.ل</span></b>${s.discount > 0 ? `<s class="num">${fmt(s.price)}</s>` : ''}`}</div>
     ${s.description ? `<div class="svc-desc">${esc(s.description)}</div>` : ''}
     <div class="box">
-      ${s.fieldEnabled ? `<div class="field"><label for="inp">${esc(label)}</label><input id="inp" class="input ${s.fieldType === 'phone' || s.fieldType === 'id' ? 'ltr' : ''}" maxlength="200" placeholder="${esc(s.fieldLabel ? 'أدخل ' + s.fieldLabel : fph)}" ${s.fieldType === 'phone' ? 'inputmode="tel"' : ''}><span class="hint">تأكد من صحة البيانات، الطلب يُنفّذ عليها مباشرة</span></div>` : ''}
+      ${s.fieldEnabled ? `<div class="field"><label for="inp">${esc(label)}</label><input id="inp" class="input ${s.fieldType === 'phone' || s.fieldType === 'id' ? 'ltr' : ''}" maxlength="200" placeholder="${esc(s.fieldLabel ? 'أدخل ' + s.fieldLabel : fph)}" ${s.fieldType === 'phone' ? 'inputmode="tel"' : ''}><span class="hint">تأكد من صحة البيانات الطلب يُنفّذ عليها مباشرة</span></div>` : ''}
       ${s.enableQuantity ? `<div class="field"><label>الكمية <span class="muted">(${s.qtyMin} - ${s.qtyMax})</span></label>
           <input type="range" id="rng" min="${s.qtyMin}" max="${s.qtyMax}" value="${s.qtyMin}" step="1">
           <input id="qn" class="input ltr" type="number" inputmode="numeric" min="${s.qtyMin}" max="${s.qtyMax}" value="${s.qtyMin}"></div>`
@@ -670,7 +675,7 @@ async function checkout(items, { fromCart = false } = {}) {
   const ok = await confirmSheet({
     title: 'تأكيد الطلب',
     text: `${lines.map((l) => `• ${esc(l.s.title)} × <span class="num">${l.it.qty}</span>`).join('<br>')}<br><br>الإجمالي: <b class="gold">${money(total)}</b><br>رصيدك بعد الشراء: ${money(r3(bal - total))}`,
-    inputs: `<div class="field" style="margin-top:6px"><label>رقم التواصل (واتساب) — اختياري</label><input class="input ltr" data-in="contact" inputmode="tel" maxlength="30" value="${esc(contact)}" placeholder="09XXXXXXXX"></div>`,
+    inputs: `<div class="field" style="margin-top:6px"><label>رقم التواصل (واتساب) · اختياري</label><input class="input ltr" data-in="contact" inputmode="tel" maxlength="30" value="${esc(contact)}" placeholder="09XXXXXXXX"></div>`,
     ok: 'تأكيد الشراء',
   });
   if (!ok) return;
@@ -695,7 +700,7 @@ function showOrderSuccess(r) {
     updateChrome();
     const autos = r.orders.filter((o) => o.auto);
     sheet(`<div class="center-t"><div class="success-ic">${icon('check')}</div><h3>${autos.length ? 'تم تسليم طلبك' : 'تم استلام طلبك'}</h3>
-      <p class="t2">${autos.length ? 'الكود جاهز في صفحة الطلب' : 'بيتم تنفيذ طلبك خلال دقائق، وبيوصلك إشعار أول ما يتنفذ'}</p>
+      <p class="t2">${autos.length ? 'الكود جاهز في صفحة الطلب' : 'بيتم تنفيذ طلبك خلال دقائق وبيوصلك إشعار أول ما يتنفذ'}</p>
       <p class="muted" style="font-size:13px">رصيدك الحالي: ${money(r.balance)}</p>
       <div style="display:grid;gap:10px;margin-top:14px">
       ${autos.length === 1 ? `<a class="btn btn-primary btn-block" href="#/order/${encodeURIComponent(autos[0].id)}" data-act="cls">عرض الكود</a>` : ''}
@@ -797,7 +802,7 @@ async function depositPage(method) {
   view.innerHTML = `<div class="dep-head">${pmIco(method)}<div><h2>${esc(p.label)}</h2>${p.note ? `<p>${esc(p.note)}</p>` : ''}</div></div>
     <form id="f" class="box" novalidate>${numBox}<div class="field"><label><span class="step-n">${stepNo}</span>أدخل بيانات التحويل</label></div>${fields}</form>
     <div class="box"><b style="font-size:14px">ملاحظات</b><ul class="notes">
-      <li>حوّل المبلغ أولاً، بعدها اضغط "تأكيد الإيداع"</li><li>الرصيد يتضاف لمحفظتك بعد ما نتأكد من التحويل، عادة خلال دقائق</li>
+      <li>حوّل المبلغ أولاً بعدها اضغط "تأكيد الإيداع"</li><li>الرصيد يتضاف لمحفظتك بعد ما نتأكد من التحويل عادة خلال دقائق</li>
       <li>أقل مبلغ ${fmt(st.depositMin)} د.ل وأعلى مبلغ ${fmt(st.depositMax)} د.ل</li></ul></div>
     <button class="btn btn-primary btn-block" style="margin-top:16px" data-act="send">تأكيد الإيداع</button>`;
   const f = $('#f');
@@ -900,7 +905,7 @@ function passwordPage() {
   setTop('inner', 'تغيير كلمة المرور');
   view.innerHTML = `<form id="f" class="box" novalidate>
     <div class="field"><label>كلمة المرور الحالية</label><input class="input" name="cur" type="password" autocomplete="current-password" maxlength="64" required></div>
-    <div class="field"><label>كلمة المرور الجديدة</label><input class="input" name="pw" type="password" autocomplete="new-password" maxlength="64" required><span class="hint">8 أحرف على الأقل، تحتوي حروفاً وأرقاماً</span></div>
+    <div class="field"><label>كلمة المرور الجديدة</label><input class="input" name="pw" type="password" autocomplete="new-password" maxlength="64" required><span class="hint">8 أحرف على الأقل تحتوي حروفاً وأرقاماً</span></div>
     <div class="field"><label>تأكيد كلمة المرور الجديدة</label><input class="input" name="pw2" type="password" autocomplete="new-password" maxlength="64" required></div>
     <button class="btn btn-primary btn-block" type="submit">تحديث كلمة المرور</button></form>`;
   const f = $('#f');
@@ -981,7 +986,7 @@ async function supportPage() {
   setTop('inner', 'الدعم والتواصل');
   try { await loadConfig(); } catch (e) { view.innerHTML = errorState(e.message); return; }
   const block = supportBlock();
-  view.innerHTML = `<p class="page-sub">تواصل معنا في أي وقت، نرد عليك في أسرع وقت.</p>${block || emptyState('support', 'ما فيش أرقام دعم مضافة بعد')}${footer()}`;
+  view.innerHTML = `<p class="page-sub">تواصل معنا في أي وقت نرد عليك في أسرع وقت.</p>${block || emptyState('support', 'ما فيش أرقام دعم مضافة بعد')}${footer()}`;
 }
 
 // 15. الصيانة
@@ -1011,7 +1016,7 @@ function maintenancePage() {
 // 14. صفحة غير موجودة
 function notFound() {
   document.body.classList.add('bare');
-  view.innerHTML = `<section class="state-page"><div class="big-404 num">404</div><h1>الصفحة غير موجودة</h1><p>عذراً، الصفحة التي تبحث عنها غير موجودة أو تم نقلها.</p>
+  view.innerHTML = `<section class="state-page"><div class="big-404 num">404</div><h1>الصفحة غير موجودة</h1><p>عذراً الصفحة التي تبحث عنها غير موجودة أو تم نقلها.</p>
     <a class="btn btn-primary" href="#/home" style="margin-top:10px">${icon('home')} العودة للرئيسية</a></section>`;
 }
 
@@ -1057,6 +1062,13 @@ onAuthStateChanged(auth, async (u) => {
   const changed = (S.user?.uid || null) !== (u?.uid || null);
   S.user = u;
   if (u) await loadMe(); else S.me = null;
-  if (!S.authReady) { S.authReady = true; $('#boot')?.remove(); render(); }
+  if (!S.authReady) {
+    S.authReady = true; $('#boot')?.remove(); render();
+    const sp = $('#splash');
+    if (sp) {
+      const wait = Math.max(0, 2300 - (Date.now() - (window.__glSplashStart || 0)));
+      setTimeout(() => { sp.classList.add('out'); setTimeout(() => sp.remove(), 550); }, document.documentElement.classList.contains('no-splash') ? 0 : wait);
+    }
+  }
   else if (changed) render();
 });

@@ -4,8 +4,8 @@ import {
   setPersistence, browserLocalPersistence, browserSessionPersistence,
   reauthenticateWithCredential, EmailAuthProvider, updatePassword,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { CONFIG } from './config.js?v=202610200540';
-import { icon } from './icons.js?v=202610200540';
+import { CONFIG } from './config.js?v=202610200548';
+import { icon } from './icons.js?v=202610200548';
 
 export { CONFIG };
 export const app = initializeApp(CONFIG.firebase);
@@ -103,11 +103,11 @@ export async function api(path, { method = 'GET', body, timeout = 25000 } = {}) 
   try {
     r = await fetch(CONFIG.API_BASE + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctl.signal, credentials: 'omit' });
   } catch (e) {
-    throw new Error(e.name === 'AbortError' ? 'انتهت مهلة الاتصال، تحقق من الإنترنت' : 'تعذّر الاتصال بالخادم، تحقق من الإنترنت');
+    throw new Error(e.name === 'AbortError' ? 'انتهت مهلة الاتصال تحقق من الإنترنت' : 'تعذّر الاتصال بالخادم تحقق من الإنترنت');
   } finally { clearTimeout(timer); }
   let j = {};
   try { j = await r.json(); } catch {}
-  if (!r.ok) { const e = new Error(j.error || 'حدث خطأ، حاول مرة أخرى'); e.status = r.status; throw e; }
+  if (!r.ok) { const e = new Error(j.error || 'حدث خطأ حاول مرة أخرى'); e.status = r.status; throw e; }
   return j;
 }
 
@@ -252,7 +252,7 @@ export async function enablePush(vapidKey, { admin = false } = {}) {
   if (!token) throw new Error('تعذر تفعيل الإشعارات');
   await api('/api/push', { method: 'POST', body: { token, admin } });
   store.set(admin ? 'gl_push_admin' : 'gl_push', true);
-  m.onMessage(m.getMessaging(app), (p) => toast(`${p.notification?.title || ''} — ${p.notification?.body || ''}`, 'ok', 5000));
+  m.onMessage(m.getMessaging(app), (p) => toast(`${p.notification?.title || ''} · ${p.notification?.body || ''}`, 'ok', 5000));
   return true;
 }
 

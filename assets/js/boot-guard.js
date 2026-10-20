@@ -7,3 +7,5 @@
     document.getElementById('gl-reload').addEventListener('click', function () { location.reload(); });
   }, 12000);
 })();
+// أمان: شاشة البداية ما تقعدش أكثر من 6 ثواني مهما صار
+setTimeout(function () { var s = document.getElementById('splash'); if (s) { s.classList.add('out'); setTimeout(function () { s.remove(); }, 550); } }, 6000);
