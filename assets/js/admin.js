@@ -143,6 +143,7 @@ async function dash() {
       <div class="panel"><h3>الأكثر مبيعاً <small>30 يوم</small></h3>${hbars(s.top, 'revenue', 'title', (v, r) => `${fmt(v)} <small class="muted">(${r.count})</small>`)}</div></div>
     <div class="panels two"><div class="panel"><h3>عدد الطلبات يومياً <small>آخر 30 يوم</small></h3>${lineChart(s.days, 'orders')}</div>
       <div class="panel"><h3>الإيداعات حسب الطريقة <small>30 يوم — د.ل</small></h3>${hbars(s.methods, 'value', 'label')}</div></div>
+    ${s.warnings && s.warnings.length ? `<div class="panel" style="margin-top:14px;border-color:rgba(229,130,111,.35)"><h3 style="color:var(--bad)">${icon('alert', 'ico-sm')} أجزاء لم تُحسب</h3><div class="tbl-mini">${s.warnings.map((w) => `<div><code style="direction:ltr;text-align:left;overflow-wrap:anywhere;font-size:11.5px">${esc(w)}</code></div>`).join('')}</div></div>` : ''}
     <p class="muted" style="font-size:12px;margin-top:12px">آخر تحديث: ${fmtDate(new Date(s.at).toISOString(), true)} — تتحدث كل دقيقة</p>`;
   A.actions.re = renderTab;
   A.actions.go = (b) => { A.tab = b.dataset.k; renderTab(); };

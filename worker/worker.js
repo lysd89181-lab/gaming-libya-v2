@@ -955,15 +955,25 @@ function wAdminLog(env, adminUid, action, ref, data = {}) {
 async function handleStats(env) {
   return cached('https://gl-cache.internal/stats-v3', 60, async () => {
     const since = new Date(Date.now() - 30 * 864e5);
-    const [orders, deposits, usersAgg, pendO, pendD, revAll, stockAgg] = await Promise.all([
-      fsQuery(env, 'orders', { where: [['createdAt', '>=', since]], limit: 8000, select: ['createdAt', 'totalPrice', 'status', 'serviceTitle', 'serviceId', 'delivery'] }),
-      fsQuery(env, 'deposits', { where: [['createdAt', '>=', since]], limit: 8000, select: ['createdAt', 'amount', 'approvedAmount', 'status', 'provider', 'method'] }),
-      fsAgg(env, 'users', [], { count: ['count'], balance: ['sum', 'balance'] }),
-      fsAgg(env, 'orders', [['status', '==', 'pending']], { c: ['count'] }),
-      fsAgg(env, 'deposits', [['status', '==', 'pending']], { c: ['count'] }),
-      fsAgg(env, 'orders', [['status', '==', 'completed']], { c: ['count'], s: ['sum', 'totalPrice'] }),
-      fsAgg(env, 'stock', [['status', '==', 'available']], { c: ['count'] }),
-    ]);
+    // كل جزء يُحسب لوحده: لو جزء فشل، الباقي يظهر عادي مع تنبيه
+    const parts = [
+      ['orders', () => fsQuery(env, 'orders', { where: [['createdAt', '>=', since]], limit: 8000, select: ['createdAt', 'totalPrice', 'status', 'serviceTitle', 'serviceId', 'delivery'] }), []],
+      ['deposits', () => fsQuery(env, 'deposits', { where: [['createdAt', '>=', since]], limit: 8000, select: ['createdAt', 'amount', 'approvedAmount', 'status', 'provider', 'method'] }), []],
+      ['users', () => fsAgg(env, 'users', [], { n: ['count'], bal: ['sum', 'balance'] }), { n: 0, bal: 0 }],
+      ['pendingOrders', () => fsAgg(env, 'orders', [['status', '==', 'pending']], { c: ['count'] }), { c: 0 }],
+      ['pendingDeposits', () => fsAgg(env, 'deposits', [['status', '==', 'pending']], { c: ['count'] }), { c: 0 }],
+      ['revenueAll', () => fsAgg(env, 'orders', [['status', '==', 'completed']], { c: ['count'], s: ['sum', 'totalPrice'] }), { c: 0, s: 0 }],
+      ['stock', () => fsAgg(env, 'stock', [['status', '==', 'available']], { c: ['count'] }), { c: 0 }],
+    ];
+    const settled = await Promise.allSettled(parts.map(([, fn]) => fn()));
+    const warnings = [];
+    const [orders, deposits, usersAgg0, pendO, pendD, revAll, stockAgg] = settled.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      console.error('stats part', parts[i][0], r.reason?.message);
+      warnings.push(`${parts[i][0]}: ${String(r.reason?.message || r.reason).slice(0, 220)}`);
+      return parts[i][2];
+    });
+    const usersAgg = { count: usersAgg0.n, balance: usersAgg0.bal };
     const dayKey = (iso) => new Date(tsMs(iso) + TZ_OFFSET_MS).toISOString().slice(0, 10);
     const days = [];
     for (let i = 29; i >= 0; i--) {
@@ -1006,6 +1016,7 @@ async function handleStats(env) {
       days,
       top: [...top.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 8),
       methods: [...methods.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
+      warnings,
       at: Date.now(),
     };
   });
@@ -1453,7 +1464,16 @@ route('POST', '/api/push', async ({ req, env, body }) => {
   return handlePushRegister(env, u.uid, body, body.admin === true && isAdmin(env, u.uid));
 });
 
-const A = (fn) => async (c) => fn({ ...c, admin: await authAdmin(c.req, c.env) });
+const A = (fn) => async (c) => {
+  const admin = await authAdmin(c.req, c.env);
+  try { return await fn({ ...c, admin }); }
+  catch (e) {
+    if (e instanceof HttpError) throw e;
+    console.error('ADMIN ERR', c.url.pathname, e && e.stack ? e.stack : e);
+    // التفاصيل تظهر للأدمن فقط (بعد التحقق من الصلاحية) لتسهيل التشخيص
+    throw new HttpError(500, 'خطأ داخلي: ' + String(e && e.message ? e.message : e).slice(0, 300));
+  }
+};
 route('GET', '/api/admin/me', A(async ({ admin }) => ({ uid: admin.uid, email: admin.email })));
 route('GET', '/api/admin/stats', A(({ env }) => handleStats(env)));
 route('GET', '/api/admin/orders', A(({ env, url }) => handleAdminOrders(env, url)));
