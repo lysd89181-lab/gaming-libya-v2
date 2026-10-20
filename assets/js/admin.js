@@ -2,7 +2,7 @@ import {
   auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, captcha, loginWith, logout, onAuthStateChanged, enablePush, compressImage,
 } from './core.js';
-import { icon, brand } from './icons.js';
+import { icon, brand, CAT_ICONS } from './icons.js';
 
 const A = { user: null, cfg: null, tab: 'dash', actions: {}, timers: [], cat: null, stats: null, cap: null };
 const root = $('#root');
@@ -24,6 +24,15 @@ document.addEventListener('click', (e) => {
   if (!a) return;
   const fn = A.actions[a.dataset.act];
   if (fn) { e.preventDefault(); fn(a, e); }
+});
+
+// اختيار أيقونة القسم (مستمع واحد للصفحة كلها)
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ip]');
+  if (!b) return;
+  const sh = b.closest('.sheet'); if (!sh) return;
+  $$('[data-ip]', sh).forEach((x) => x.classList.toggle('on', x === b));
+  $('[data-in="icon"]', sh).value = b.dataset.ip;
 });
 
 /* ---------- Login (13) ---------- */
@@ -301,16 +310,19 @@ async function categories() {
   $('#main').innerHTML = top('الأقسام', `<button class="btn btn-primary btn-sm" data-act="add">${icon('plus', 'ico-sm')} قسم جديد</button>`) + '<div class="grid-cards" id="list"><div class="sk" style="height:200px"></div></div>';
   const c = await loadCat(true);
   const count = (id) => c.services.filter((s) => s.category === id).length;
-  $('#list').innerHTML = c.categories.length ? c.categories.map((x) => `<div class="g-card"><div class="gm">${imgTag(x.image, x.name)}${x.hidden ? '<span class="badge badge-bad">مخفي</span>' : ''}</div>
+  $('#list').innerHTML = c.categories.length ? c.categories.map((x) => `<div class="g-card"><div class="gm">${x.icon ? `<div class="img-ph">${icon(x.icon, 'ico-lg')}</div>` : imgTag(x.image, x.name)}${x.hidden ? '<span class="badge badge-bad">مخفي</span>' : ''}</div>
     <div class="gb"><b>${esc(x.name)}</b><small class="muted">${count(x.id)} خدمة • ترتيب ${x.order}</small>
     <div style="display:flex;gap:6px"><button class="btn btn-soft btn-xs" style="flex:1" data-act="edit" data-id="${esc(x.id)}">${icon('edit', 'ico-sm')} تعديل</button><button class="btn btn-danger btn-xs" data-act="del" data-id="${esc(x.id)}" aria-label="حذف">${icon('trash', 'ico-sm')}</button></div></div></div>`).join('')
     : `<div class="empty" style="grid-column:1/-1"><div class="ico-wrap">${icon('grid', 'ico-lg')}</div><b>لا توجد أقسام</b></div>`;
   const form = (x = {}) => formSheet(`<h3>${x.id ? 'تعديل قسم' : 'قسم جديد'}</h3><div class="form-grid" style="margin-top:12px">
     <div class="field"><label>اسم القسم</label><input class="input" data-in="name" maxlength="40" value="${esc(x.name || '')}"></div>
-    <div class="field"><label>الصورة</label>${uploader('image', x.image || '')}</div>
+    <div class="field"><label>أيقونة القسم <span class="muted">(تظهر بدل الصورة)</span></label><input type="hidden" data-in="icon" value="${esc(x.icon || '')}">
+      <div class="icon-pick"><button type="button" class="ip ${!x.icon ? 'on' : ''}" data-ip="" title="بدون أيقونة (الصورة)">${icon('image')}<small>صورة</small></button>${CAT_ICONS.map(([k, t]) => `<button type="button" class="ip ${x.icon === k ? 'on' : ''}" data-ip="${k}" title="${esc(t)}">${icon(k)}<small>${esc(t)}</small></button>`).join('')}</div></div>
+    <div class="field"><label>الصورة <span class="muted">(تُستعمل لو ما اخترتش أيقونة)</span></label>${uploader('image', x.image || '')}</div>
     <div class="field"><label>الترتيب (الأصغر أولاً)</label><input class="input ltr" type="number" data-in="order" value="${x.order ?? 0}"></div>
     <label class="toggle-row"><span><b>إخفاء القسم</b><small>لن يظهر في المتجر</small></span><span class="switch"><input type="checkbox" data-in="hidden" ${x.hidden ? 'checked' : ''}></span></label></div>`,
   async (v) => { await api('/api/admin/categories', { method: 'POST', body: { ...v, id: x.id } }); toast('تم الحفظ', 'ok'); categories(); });
+
   A.actions.add = () => form();
   A.actions.edit = (b) => form(c.categories.find((x) => x.id === b.dataset.id));
   A.actions.del = async (b) => {

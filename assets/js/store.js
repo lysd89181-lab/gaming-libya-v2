@@ -182,9 +182,9 @@ function priceHtml(s) {
 }
 function pCard(s) {
   const out = s.auto && s.stock === 0;
-  const tag = s.auto ? `<span class="p-tag">${out ? 'نفذت الكمية' : 'تسليم فوري'}</span>` : s.badge ? `<span class="p-tag">${esc(s.badge)}</span>` : '';
+  const tag = s.auto ? `<span class="p-tag ${out ? 'out' : ''}">${out ? 'نفذت الكمية' : `${icon('bolt')} تسليم فوري`}</span>` : s.badge ? `<span class="p-tag out">${esc(s.badge)}</span>` : '';
   return `<a class="p-card ${out ? 'out' : ''}" href="#/service/${encodeURIComponent(s.id)}">
-    <div class="p-media">${imgTag(s.image, s.title)}${s.discount > 0 ? `<span class="p-off">-${s.discount}%</span>` : ''}${tag}
+    <div class="p-media">${imgTag(s.image, s.title)}${s.discount > 0 ? `<span class="p-off"><span class="num">${s.discount}%</span>&nbsp;خصم</span>` : ''}${tag}
     <button class="p-fav ${S.favs.has(s.id) ? 'on' : ''}" data-fav="${esc(s.id)}" aria-label="المفضلة">${icon('heart')}</button></div>
     <div class="p-body"><div class="p-title">${esc(s.title)}</div><div class="p-price">${priceHtml(s)}</div></div><span class="p-buy">${out ? 'غير متوفر' : 'اشترِ الآن'}</span></a>`;
 }
@@ -356,20 +356,17 @@ async function home() {
   const n = banners.length || 1;
   view.innerHTML = `
     <a class="searchbar" href="#/search">${icon('search')}<span>ابحث عن لعبة، بطاقة، أو اشتراك...</span></a>
-    ${S.me ? `<div class="balance"><div><small>رصيدك</small><div class="amt">${money(S.me.balance)}</div></div><a class="btn-add" href="#/wallet">${icon('plus')} شحن</a></div>`
-      : `<div class="balance"><div><small>عندك حساب؟</small><div style="font-weight:700;font-size:15px">سجّل دخولك عشان تشحن</div></div><a class="btn-add" href="#/login">دخول</a></div>`}
+    ${S.me ? `<div class="balance"><div><small>رصيد المحفظة</small><div class="amt">${money(S.me.balance)}</div></div><a class="btn-add" href="#/wallet">${icon('plus')} شحن</a></div>`
+      : `<div class="balance"><div><small>عندك حساب؟</small><b>سجّل دخولك عشان تشحن</b></div><a class="btn-add" href="#/login">دخول</a></div>`}
     ${s.announcement ? `<div class="announce">${icon('info')}<span>${esc(s.announcement)}</span></div>` : ''}
     ${banners.length ? `<div class="banners"><div class="b-track" id="track">${slides}</div>${n > 1 ? `<div class="b-dots">${Array.from({ length: n }, (_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>`
-      : `<div class="b-default" style="margin-top:16px"><h3>اشحن ألعابك المفضلة فوراً وبأفضل سعر في ليبيا</h3><p>ادفع بليبيانا أو مدار أو تحويل بنكي، واستلم طلبك في دقائق.</p><a class="btn btn-primary btn-sm" href="#/categories">تصفّح الأقسام</a>
+      : `<div class="b-default"><h3>اشحن ألعابك المفضلة فوراً وبأفضل سعر في ليبيا</h3><p>ادفع بليبيانا أو مدار أو تحويل بنكي، واستلم طلبك في دقائق.</p><a class="btn btn-primary btn-sm" href="#/categories">تصفّح الأقسام</a>
         <div class="trust"><span>${icon('shield')} دفع آمن</span><span>${icon('clock')} تنفيذ سريع</span><span>${icon('support')} دعم فني</span></div></div>`}
-    <section class="sec"><div class="sec-head"><h2>الأقسام</h2><a href="#/categories">الكل</a></div>
-      <div class="h-scroll">${cat.categories.slice(0, 12).map((c) => `<a class="cat-pill" href="#/category/${encodeURIComponent(c.id)}"><div class="ring">${imgTag(c.image, c.name)}</div><span>${esc(c.name.trim())}</span></a>`).join('') || '<span class="muted">لا توجد أقسام بعد</span>'}</div></section>
-    ${best.length ? `<section class="sec"><div class="sec-head"><h2>الأكثر مبيعاً</h2><a href="#/categories">الكل</a></div><div class="h-scroll">${best.map(pCard).join('')}</div></section>` : ''}
-    ${offers.length ? `<section class="sec"><div class="sec-head"><h2>عروض وخصومات</h2><a href="#/offers">الكل</a></div><div class="h-scroll">${offers.map(pCard).join('')}</div></section>` : ''}
-    <section class="sec"><div class="sec-head"><h2>كل الأقسام</h2></div>
-      <div class="cat-grid reveal">${cat.categories.slice(0, 9).map(catCard).join('')}</div>
-      ${cat.categories.length > 9 ? `<a class="btn btn-ghost btn-block" style="margin-top:16px" href="#/categories">عرض كل الأقسام (${cat.categories.length})</a>` : ''}</section>
-    ${supportBlock() ? `<section class="sec"><div class="sec-head"><h2>تواصل معنا</h2><a href="#/support">الكل ${icon('forward')}</a></div>${supportBlock()}</section>` : ''}
+    <section class="sec"><div class="sec-head"><h2>الأقسام</h2><a href="#/categories">عرض الكل ${icon('forward')}</a></div>
+      ${cat.categories.length ? `<div class="cat-grid reveal">${(cat.categories.length > 8 ? cat.categories.slice(0, 7) : cat.categories).map(catTile).join('')}${cat.categories.length > 8 ? `<a class="cat-tile" href="#/categories"><span class="ci">${icon('more')}</span><span>المزيد</span></a>` : ''}</div>` : '<span class="muted">لا توجد أقسام بعد</span>'}</section>
+    ${best.length ? `<section class="sec"><div class="sec-head"><h2>الأكثر مبيعاً</h2><a href="#/offers?all=1">عرض الكل ${icon('forward')}</a></div><div class="h-scroll">${best.map(pCard).join('')}</div></section>` : ''}
+    ${offers.length ? `<section class="sec"><div class="sec-head"><h2>عروض وخصومات</h2><a href="#/offers">عرض الكل ${icon('forward')}</a></div><div class="h-scroll">${offers.map(pCard).join('')}</div></section>` : ''}
+    ${supportBlock() ? `<section class="sec"><div class="sec-head"><h2>تواصل معنا</h2><a href="#/support">عرض الكل ${icon('forward')}</a></div>${supportBlock()}</section>` : ''}
     ${footer()}`;
   if (n > 1) {
     const track = $('#track'), dots = $$('.b-dots i');
@@ -387,8 +384,9 @@ async function home() {
   }
 
 }
-function catCard(c) {
-  return `<a class="cat-card" href="#/category/${encodeURIComponent(c.id)}"><div class="cm">${imgTag(c.image, c.name)}</div><b>${esc(c.name.trim())}</b></a>`;
+function catTile(c) {
+  const vis = c.icon ? icon(c.icon) : imgUrl(c.image) ? imgTag(c.image, c.name) : icon('gamepad');
+  return `<a class="cat-tile" href="#/category/${encodeURIComponent(c.id)}"><span class="ci">${vis}</span><span>${esc(c.name.trim())}</span></a>`;
 }
 
 // كل الأقسام
@@ -396,7 +394,14 @@ async function categoriesPage() {
   setTop('inner', 'الأقسام', `<a class="btn-icon" href="#/search" aria-label="بحث">${icon('search')}</a>`);
   view.innerHTML = skGrid(6);
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
-  view.innerHTML = S.cat.categories.length ? `<div class="cat-grid reveal" style="margin-top:16px">${S.cat.categories.map(catCard).join('')}</div>` : emptyState('grid', 'لا توجد أقسام بعد');
+  if (!S.cat.categories.length) { view.innerHTML = emptyState('grid', 'لا توجد أقسام بعد', 'الأقسام بتظهر هنا أول ما تنضاف', '<a class="btn btn-primary btn-sm" href="#/home">الرئيسية</a>'); return; }
+  const popular = [...S.cat.services].sort((a, b) => b.sold - a.sold || a.order - b.order);
+  view.innerHTML = `<div class="cat-grid c3 reveal" style="margin-top:8px">${S.cat.categories.map(catTile).join('')}</div>
+    <section class="sec"><div class="sec-head"><h2>أشهر الخدمات</h2></div><div id="pop"></div></section>`;
+  const holder = $('#pop');
+  const sub = document.createElement('div');
+  holder.appendChild(sub);
+  listInto(sub, popular.slice(0, 60), { emptyText: 'لا توجد خدمات بعد' });
 }
 
 // 5. صفحة القسم
@@ -409,7 +414,8 @@ async function categoryPage(id) {
   setTop('inner', c.name, `<a class="btn-icon" href="#/search" aria-label="بحث">${icon('search')}</a>`);
   listPage(S.cat.services.filter((s) => s.category === id), { emptyText: 'لا توجد خدمات في هذا القسم حالياً' });
 }
-function listPage(items, { emptyText = 'لا توجد نتائج', head = '' } = {}) {
+function listPage(items, opts = {}) { listInto(view, items, opts); }
+function listInto(root, items, { emptyText = 'لا توجد نتائج', head = '' } = {}) {
   let sort = 'default', page = 1;
   const draw = () => {
     let list = [...items];
@@ -420,21 +426,23 @@ function listPage(items, { emptyText = 'لا توجد نتائج', head = '' } =
     else if (sort === 'auto') list = list.filter((s) => s.auto);
     else list.sort((a, b) => a.order - b.order || a.finalPrice - b.finalPrice);
     const shown = list.slice(0, page * 20);
-    $('#grid').innerHTML = shown.length ? shown.map(pCard).join('') : `<div style="grid-column:1/-1">${emptyState('box', emptyText)}</div>`;
+    $('#grid').innerHTML = shown.length ? shown.map(pCard).join('') : `<div style="grid-column:1/-1">${emptyState('box', emptyText, '', '<a class="btn btn-ghost btn-sm" href="#/categories">تصفّح الأقسام</a>')}</div>`;
     $('#more').classList.toggle('hidden', list.length <= shown.length);
     $$('.toolbar .chip').forEach((ch) => ch.classList.toggle('active', ch.dataset.sort === sort));
   };
   const chips = [['default', 'الكل'], ['low', 'الأقل سعراً'], ['high', 'الأعلى سعراً'], ['best', 'الأكثر مبيعاً'], ['off', 'خصم'], ['auto', 'تسليم فوري']];
-  view.innerHTML = `${head}<div class="toolbar">${chips.map(([k, t]) => `<button class="chip" data-act="sort" data-sort="${k}">${t}</button>`).join('')}</div>
-    <div class="p-grid wide reveal" id="grid"></div><button class="btn btn-ghost btn-block hidden" id="more" data-act="more" style="margin-top:18px">تحميل المزيد</button>`;
+  root.innerHTML = `${head}<div class="toolbar">${chips.map(([k, t]) => `<button class="chip" data-act="sort" data-sort="${k}">${t}</button>`).join('')}</div>
+    <div class="p-grid wide reveal" id="grid"></div><button class="btn btn-ghost btn-block hidden" id="more" data-act="more" style="margin-top:16px">تحميل المزيد</button>`;
   S.actions.sort = (b) => { sort = b.dataset.sort; page = 1; draw(); };
   S.actions.more = () => { page++; draw(); };
   draw();
 }
-async function offersPage() {
-  setTop('inner', 'العروض');
+async function offersPage(q) {
+  const all = q && q.get('all');
+  setTop('inner', all ? 'الأكثر مبيعاً' : 'العروض');
   view.innerHTML = skGrid(4);
   try { await loadCatalog(); } catch (e) { view.innerHTML = errorState(e.message); return; }
+  if (all) return listPage([...S.cat.services].sort((a, b) => b.sold - a.sold), { emptyText: 'لا توجد خدمات بعد' });
   listPage(S.cat.services.filter((s) => s.discount > 0), { emptyText: 'لا توجد عروض حالياً، تابعنا قريباً' });
 }
 async function favoritesPage() {
@@ -479,14 +487,11 @@ async function servicePage(id) {
   const maxQty = s.enableQuantity ? s.qtyMax : s.auto ? Math.max(1, Math.min(10, s.stock || 1)) : 10;
   const related = S.cat.services.filter((x) => x.category === s.category && x.id !== s.id).slice(0, 10);
   view.innerHTML = `
-    <div class="svc-hero">${imgTag(s.image, s.title)}${s.discount > 0 ? `<span class="p-off">-${s.discount}%</span>` : ''}</div>
+    <div class="svc-hero">${imgTag(s.image, s.title)}<div class="svc-badges">
+      ${s.auto ? (out ? '<span class="badge">نفذت الكمية</span>' : `<span class="badge ok">${icon('bolt')} تسليم فوري</span><span class="badge">متوفر <span class="num">${s.stock}</span></span>`) : `<span class="badge">${icon('clock')} يتنفذ خلال دقائق</span>`}
+      ${s.discount > 0 ? `<span class="badge sale"><span class="num">${s.discount}%</span> خصم</span>` : ''}${s.badge ? `<span class="badge">${esc(s.badge)}</span>` : ''}</div></div>
     <div class="svc-head"><h1>${esc(s.title)}</h1></div>
     <div class="svc-price">${s.enableQuantity ? `<b><span class="num" id="unitP">${fmt(linePrice(s, s.qtyMin))}</span> <span class="cur">د.ل / ${s.qtyMin}</span></b>` : `<b><span class="num">${fmt(s.finalPrice)}</span> <span class="cur">د.ل</span></b>${s.discount > 0 ? `<s class="num">${fmt(s.price)}</s>` : ''}`}</div>
-    <div class="svc-meta">
-      ${s.auto ? (out ? '<span class="badge badge-bad">نفذت الكمية</span>' : `<span class="badge badge-ok">الكود يوصلك مباشرة بعد الدفع</span><span class="badge badge-gold">المتوفر: <span class="num">${s.stock}</span></span>`)
-        : '<span class="badge badge-gold">التنفيذ خلال 5 إلى 30 دقيقة</span>'}
-      ${s.badge ? `<span class="badge badge-gold">${esc(s.badge)}</span>` : ''}
-    </div>
     ${s.description ? `<div class="svc-desc">${esc(s.description)}</div>` : ''}
     <div class="box">
       ${s.fieldEnabled ? `<div class="field"><label for="inp">${esc(label)}</label><input id="inp" class="input ${s.fieldType === 'phone' || s.fieldType === 'id' ? 'ltr' : ''}" maxlength="200" placeholder="${esc(s.fieldLabel ? 'أدخل ' + s.fieldLabel : fph)}" ${s.fieldType === 'phone' ? 'inputmode="tel"' : ''}><span class="hint">تأكد من صحة البيانات، الطلب يُنفّذ عليها مباشرة</span></div>` : ''}
@@ -648,10 +653,15 @@ async function walletPage() {
   try { await Promise.all([loadConfig(), loadMe()]); } catch (e) { view.innerHTML = errorState(e.message); return; }
   if (!S.me) return;
   const pms = Object.entries(S.cfg.settings.payments).filter(([, p]) => p.enabled);
-  view.innerHTML = `<div class="wallet-hero"><small>رصيدك الحالي</small><div class="amt">${money(S.me.balance)}</div>
-      <div class="wallet-actions"><a class="btn btn-primary" href="#wallet-methods" data-act="toMethods">إيداع</a><a class="btn btn-ghost" href="#/deposits">السجل</a></div></div>
-    <section class="sec" id="wallet-methods"><div class="sec-head"><h2>طرق الإيداع</h2></div>
-    <div class="list">${pms.map(([k, p]) => `<a class="row-link" href="#/deposit/${k}">${pmIco(k)}<span class="rt"><b>${esc(p.label)}</b><small>${k === 'crypto' ? `USDT — الدولار بـ ${fmt(S.cfg.settings.usdRate)} د.ل` : PM_SUB[k] || ''}</small></span>${icon('forward', 'chev')}</a>`).join('') || emptyState('wallet', 'لا توجد طرق إيداع متاحة حالياً')}</div></section>`;
+  view.innerHTML = `<div class="wallet-hero"><div><small>رصيدك الحالي</small><div class="amt">${money(S.me.balance)}</div></div><span class="wi">${icon('wallet')}</span></div>
+    <div class="wallet-actions"><a class="btn btn-primary" href="#wallet-methods" data-act="toMethods">${icon('plus')} إيداع</a><a class="btn btn-ghost" href="#/deposits">سجل المعاملات</a></div>
+    <section class="sec" id="wallet-methods"><div class="sec-head"><h2>طرق الدفع</h2></div>
+    ${pms.length ? `<div class="pm-grid reveal">${pms.map(([k, p]) => `<a class="pm-tile" href="#/deposit/${k}">${pmIco(k)}<span>${esc(p.label)}</span></a>`).join('')}</div>` : emptyState('wallet', 'لا توجد طرق دفع متاحة حالياً')}</section>
+    <section class="sec"><div class="sec-head"><h2>آخر الإيداعات</h2><a href="#/deposits">عرض الكل ${icon('forward')}</a></div><div id="recent"><div class="sk" style="height:56px"></div></div></section>`;
+  api('/api/deposits').then((r) => {
+    const el = $('#recent'); if (!el) return;
+    el.innerHTML = r.deposits.length ? `<div class="list pad reveal">${r.deposits.slice(0, 4).map(depRow).join('')}</div>` : emptyState('wallet', 'ما عندكش إيداعات سابقة', 'اختار طريقة دفع من فوق وابدا');
+  }).catch(() => { const el = $('#recent'); if (el) el.innerHTML = ''; });
   S.actions.toMethods = () => $('#wallet-methods').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -698,16 +708,18 @@ async function depositPage(method) {
     } catch (e) { toast(e.message, 'bad', 5000); }
   });
 }
+function depRow(d) {
+  return `<div class="dep-row">${pmIco(d.method)}<div class="dr"><b>${esc(d.provider || d.method)}</b><small class="num">${fmtDate(d.createdAt, true)}</small>${d.reason ? `<small style="display:block;color:var(--bad)">${esc(d.reason)}</small>` : ''}</div>
+    <div class="dl"><b>${money(d.approvedAmount ?? d.amount)}</b>${statusBadge(d.status)}</div></div>`;
+}
 async function depositsPage() {
   if (!S.user) return needLogin('deposits');
-  setTop('inner', 'سجل الإيداعات');
+  setTop('inner', 'سجل المعاملات');
   view.innerHTML = `<div class="sk" style="height:64px;margin-top:16px"></div><div class="sk" style="height:64px;margin-top:10px"></div>`;
   let r;
   try { r = await api('/api/deposits'); } catch (e) { view.innerHTML = errorState(e.message); return; }
   if (!r.deposits.length) { view.innerHTML = emptyState('wallet', 'ما عندكش إيداعات سابقة', '', '<a class="btn btn-primary btn-sm" href="#/wallet">إيداع رصيد</a>'); return; }
-  view.innerHTML = r.deposits.map((d) => `<div class="o-card" style="cursor:default;grid-template-columns:34px 1fr auto">${pmIco(d.method)}
-    <div style="min-width:0"><b>${esc(d.provider || d.method)}</b><small>${timeAgo(d.createdAt)}${d.reason ? ` • ${esc(d.reason)}` : ''}</small></div>
-    <div class="o-side"><span class="price">${money(d.approvedAmount ?? d.amount)}</span>${statusBadge(d.status)}</div></div>`).join('');
+  view.innerHTML = `<div class="list pad reveal" style="margin-top:8px">${r.deposits.map(depRow).join('')}</div>`;
 }
 
 // 10. حسابي
@@ -846,7 +858,7 @@ async function notificationsPage() {
   let r;
   try { r = await api('/api/notifications'); } catch (e) { view.innerHTML = errorState(e.message); return; }
   if (S.me) { S.me.unread = 0; updateChrome(); }
-  if (!r.notifications.length) { view.innerHTML = emptyState('bell', 'ما فيش إشعارات', 'هنا بتلقى تحديثات طلباتك وإيداعاتك'); return; }
+  if (!r.notifications.length) { view.innerHTML = emptyState('bell', 'ما فيش إشعارات', 'هنا بتلقى تحديثات طلباتك وإيداعاتك', '<a class="btn btn-ghost btn-sm" href="#/home">الرئيسية</a>'); return; }
   const ic = { order: 'receipt', deposit: 'wallet', admin: 'bell', info: 'bell' };
   view.innerHTML = '<div class="reveal">' + r.notifications.map((n) => {
     const inner = `<span class="n-ico">${icon(ic[n.type] || 'bell')}</span><div style="min-width:0"><b>${esc(n.title)}</b><p>${esc(n.body)}</p><small>${timeAgo(n.createdAt)}</small></div>`;
@@ -903,7 +915,7 @@ const ROUTES = [
   [/^$/, () => (!S.user && !store.get('gl_seen') ? welcome() : home())],
   [/^welcome$/, welcome], [/^home$/, home], [/^login$/, (m, q) => loginPage(q)], [/^signup$/, (m, q) => signupPage(q)], [/^forgot$/, forgotPage],
   [/^categories$/, categoriesPage], [/^category\/([\w-]+)$/, (m) => categoryPage(m[1])], [/^service\/([\w-]+)$/, (m) => servicePage(m[1])],
-  [/^search$/, (m, q) => searchPage(q)], [/^offers$/, offersPage], [/^favorites$/, favoritesPage], [/^cart$/, cartPage],
+  [/^search$/, (m, q) => searchPage(q)], [/^offers$/, (m, q) => offersPage(q)], [/^favorites$/, favoritesPage], [/^cart$/, cartPage],
   [/^wallet$/, walletPage], [/^deposit\/(\w+)$/, (m) => depositPage(m[1])], [/^deposits$/, depositsPage],
   [/^account$/, accountPage], [/^profile$/, profilePage], [/^password$/, passwordPage],
   [/^orders$/, (m, q) => ordersPage(q)], [/^order\/([\w-]+)$/, (m) => orderPage(m[1])], [/^notifications$/, notificationsPage], [/^support$/, supportPage],

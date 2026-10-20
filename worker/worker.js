@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS = {
 };
 const PAYMENT_KEYS = Object.keys(DEFAULT_SETTINGS.payments);
 const FIELD_TYPES = ['id', 'phone', 'account', 'custom'];
+const CAT_ICON_NAMES = ['gamepad', 'crosshair', 'fire', 'joystick', 'swords', 'gem', 'coin', 'giftcard', 'gift', 'tv', 'film', 'sim', 'whatsapp', 'telegram', 'snapchat', 'tiktok', 'instagram', 'headphones', 'crown', 'trophy', 'ticket', 'bag', 'percent', 'star', 'rocket', 'more'];
 const CTA_TYPES = ['none', 'url', 'page', 'whatsapp', 'tiktok', 'phone'];
 const CHANNEL_TYPES = ['whatsapp', 'whatsapp_channel', 'telegram', 'tiktok', 'instagram', 'facebook', 'youtube', 'snapchat', 'website'];
 
@@ -498,7 +499,7 @@ function finalPrice(s) {
   return round3(p - (p * d) / 100);
 }
 function pubCategory(c) {
-  return { id: c.id, name: c.name || '', image: c.image || c.cover || '', order: num(c.order, 0), hidden: c.hidden === true };
+  return { id: c.id, name: c.name || '', image: c.image || c.cover || '', icon: CAT_ICON_NAMES.includes(c.icon) ? c.icon : '', order: num(c.order, 0), hidden: c.hidden === true };
 }
 function pubService(s) {
   const qty = !!s.enableQuantity;
@@ -1176,6 +1177,7 @@ async function handleSaveCategory(env, admin, body) {
   const data = {
     name: str(body.name, { min: 1, max: 40, field: 'اسم القسم' }),
     image: imageUrl(body.image),
+    icon: CAT_ICON_NAMES.includes(body.icon) ? body.icon : '',
     order: int(body.order, 0),
     hidden: bool(body.hidden),
   };
