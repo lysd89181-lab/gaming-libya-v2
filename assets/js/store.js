@@ -2,8 +2,8 @@ import {
   CONFIG, auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, uuid, captcha, loginWith, signupWith, resetPassword, changePassword, logout,
   onAuthStateChanged, enablePush,
-} from './core.js?v=202610201150';
-import { icon, logoMark, brand, SKY } from './icons.js?v=202610201150';
+} from './core.js?v=202610201844';
+import { icon, logoMark, brand } from './icons.js?v=202610201844';
 
 /* ================= State ================= */
 const S = {
@@ -132,7 +132,7 @@ function toggleTheme() {
   if (light) document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme');
   store.set('gl_theme', light ? 'light' : 'dark');
   try { localStorage.setItem('gl_theme', light ? 'light' : 'dark'); } catch {}
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', light ? '#f3f5ef' : '#141414');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', light ? '#f4f4f6' : '#0b0b0d');
   $$('.theme-toggle').forEach((b) => { b.innerHTML = icon(light ? 'moon' : 'sun'); });
   const sw = $('#themeSw'); if (sw) sw.checked = light;
 }
@@ -377,7 +377,7 @@ async function home() {
   const cats = cat.categories;
   view.innerHTML = `
     <header class="band">
-      <div class="bt"><a href="#/home">${brand('GAMING LIBYA').replace('<b>Gaming</b>', '<b>جيمنق ليبيا</b>')}</a>
+      <div class="bt"><a href="#/home">${brand()}</a>
         <div class="pills">
           <a class="pill-ic soft" href="#/notifications" aria-label="الإشعارات">${icon('bell')}${S.me?.unread ? '<i class="dot"></i>' : ''}</a>
           <a class="pill-ic soft" id="bandCart" href="#/cart" aria-label="السلة">${icon('cart')}<i class="count ${nCart ? '' : 'hidden'}">${nCart}</i></a>

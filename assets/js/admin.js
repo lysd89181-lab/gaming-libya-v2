@@ -1,8 +1,8 @@
 import {
   auth, api, esc, $, $$, imgTag, imgUrl, fmt, money, timeAgo, fmtDate, store, toast, sheet, closeSheet,
   confirmSheet, busy, copyText, captcha, loginWith, logout, onAuthStateChanged, enablePush, compressImage,
-} from './core.js?v=202610201150';
-import { icon, brand, CAT_ICONS } from './icons.js?v=202610201150';
+} from './core.js?v=202610201844';
+import { icon, brand, CAT_ICONS } from './icons.js?v=202610201844';
 
 const A = { user: null, cfg: null, tab: 'dash', actions: {}, timers: [], cat: null, stats: null, cap: null };
 const root = $('#root');
@@ -116,7 +116,7 @@ function barChart(days, key, { h = 190 } = {}) {
   const bars = days.map((d, i) => {
     const bh = Math.max(d[key] ? 3 : 0, (d[key] / max) * (h - 30));
     const x = w - (i + 1) * bw;
-    return `<rect x="${x + bw * 0.2}" y="${h - 18 - bh}" width="${bw * 0.6}" height="${bh}" rx="2" fill="#D4B895"><title>${d.day}: ${fmt(d[key])}</title></rect>`;
+    return `<rect x="${x + bw * 0.2}" y="${h - 18 - bh}" width="${bw * 0.6}" height="${bh}" rx="2" style="fill:var(--brand)"><title>${d.day}: ${fmt(d[key])}</title></rect>`;
   }).join('');
   const labels = days.map((d, i) => (i % 5 === 4 || i === n - 1 ? `<text x="${w - (i + 0.5) * bw}" y="${h - 3}" text-anchor="middle">${d.day.slice(5).replace('-', '/')}</text>` : '')).join('');
   const grid = [0.25, 0.5, 0.75, 1].map((p) => `<line x1="0" x2="${w}" y1="${h - 18 - p * (h - 30)}" y2="${h - 18 - p * (h - 30)}" stroke="rgba(232,213,183,.07)"/>`).join('');
@@ -127,9 +127,9 @@ function lineChart(days, key, { h = 150 } = {}) {
   const max = Math.max(1, ...days.map((d) => d[key]));
   const pts = days.map((d, i) => [w - (i / (n - 1)) * w, h - 16 - (d[key] / max) * (h - 30)]);
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(201,160,108,.35)"/><stop offset="1" stop-color="rgba(201,160,108,0)"/></linearGradient></defs>
-    <path d="${path} L0,${h - 16} L${w},${h - 16} Z" fill="url(#lg)"/><path d="${path}" fill="none" stroke="#D9B988" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-    ${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="#E8D2AD"><title>${days[i].day}: ${days[i][key]}</title></circle>`).join('')}<text x="${w}" y="10" text-anchor="end">${max}</text></svg>`;
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(225,29,46,.35)"/><stop offset="1" stop-color="rgba(225,29,46,0)"/></linearGradient></defs>
+    <path d="${path} L0,${h - 16} L${w},${h - 16} Z" fill="url(#lg)"/><path d="${path}" fill="none" style="stroke:var(--brand)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" style="fill:var(--brand-300)"><title>${days[i].day}: ${days[i][key]}</title></circle>`).join('')}<text x="${w}" y="10" text-anchor="end">${max}</text></svg>`;
 }
 function hbars(rows, valKey, labelKey, fmtV = (v) => fmt(v)) {
   const max = Math.max(1, ...rows.map((r) => r[valKey]));
